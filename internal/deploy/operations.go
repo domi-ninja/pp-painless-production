@@ -12,10 +12,11 @@ import (
 )
 
 type Deployer struct {
-	Root   string
-	Out    io.Writer
-	Err    io.Writer
-	Runner Runner
+	Root     string
+	Out      io.Writer
+	Err      io.Writer
+	Runner   Runner
+	resolver hostResolver
 }
 
 func NewDeployer(root string, out io.Writer, errOut io.Writer) Deployer {
@@ -128,6 +129,7 @@ func (d Deployer) Deploy() error {
 	}
 
 	fmt.Fprintf(d.Out, "deployed %s\n", plan.ReleaseID)
+	d.CheckDomains(plan)
 	return nil
 }
 
