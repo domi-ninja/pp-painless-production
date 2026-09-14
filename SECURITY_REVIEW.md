@@ -1,12 +1,12 @@
 # Security review
 
-Source review from 2026-09-07, commit `7dff342` plus working-tree changes. Shortened 2026-09-10; findings were not re-audited. Assumes trusted deployment configuration.
+Source review from 2026-09-07, commit `7dff342` plus working-tree changes. Updated 2026-09-14. Assumes trusted deployment configuration.
 
-Fix the two high-severity issues first.
+Findings 1 and 2 are fixed in the CLI. Findings 3 through 6 remain open.
 
-1. **High: dev and prod share resources.** With the same project name on one host, environments reuse Compose resources, allocated ports and route files. Dev can replace prod containers; `down` selects both. Local state also mixes environments in one checkout. Include project and environment in resource identities, state and removal filters. Existing resources need migration. [Code](internal/deploy/operations.go#L328)
+1. **Fixed: dev and prod shared resources.** The CLI now includes project and environment in managed resource names and state paths, filters shutdown by both labels, and rejects mismatched rollback records. Legacy deployments require an explicit cutover. Bind mounts, external volumes and helper scripts still need separate environment configuration. [Migration guide](deploy-cli.md#migrating-an-existing-deployment)
 
-2. **High: fixed ports default to public access.** Changing `published: auto` to a number drops the loopback binding unless `host_ip` is explicit. Reachable clients can bypass proxy TLS and access controls. Default all ports to `127.0.0.1`; require an explicit public binding. [Code](internal/deploy/compose.go#L378) · [Docker behavior](https://docs.docker.com/engine/network/port-publishing/)
+2. **Fixed: fixed ports defaulted to public access.** Fixed and automatic ports now default to `127.0.0.1`; public bindings require an explicit `host_ip`. Humanist already uses loopback behind host-level Caddy, and all seven live smoke checks passed on 2026-09-14. Existing fixed ports change on their next deployment. [Code](internal/deploy/compose.go#L378)
 
 3. **Medium: uploaded secrets can be readable by other host users.** Rendered Compose files contain passwords and use `0644`; remote directories have no enforced private mode. Exposure depends on home-directory permissions and umask. Enforce `0700` directories and `0600` secret files. [Code](internal/deploy/operations.go#L484)
 

@@ -1,6 +1,6 @@
 # Humanist Self-Hosted Convex Dev/Prod Isolation Plan
 
-Status: proposed
+Status: historical proposal, not executed. As of 2026-09-10, the CLI supports separate configs and project/environment isolation. Prefer independent dev and prod deployments using `--config`; the shared-deployment design below needs revision before implementation. See [migration instructions](deploy-cli.md#migrating-an-existing-deployment).
 
 ## Decision
 
@@ -242,7 +242,7 @@ The first rollout is additive. If dev provisioning fails:
 4. Leave all existing production services, routes, bind mounts, env values, and
    production bucket names unchanged.
 
-Current `pp down` removes every container with `pp.project=humanist-design`, so it
+The legacy `pp down` removes every container with `pp.project=humanist-design`, so it
 is not an environment-selective rollback command. Use explicit service-scoped
 cleanup during this rollout.
 

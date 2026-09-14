@@ -80,9 +80,14 @@ type State struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
-func LoadState(root string) (State, error) {
-	path := statePath(root)
-	body, err := os.ReadFile(path)
+func LoadState(root string, project Project) (State, error) {
+	if err := project.validate(); err != nil {
+		return State{}, err
+	}
+	if err := checkLegacyState(root); err != nil {
+		return State{}, err
+	}
+	body, err := os.ReadFile(statePath(root, project))
 	if errors.Is(err, os.ErrNotExist) {
 		return State{}, nil
 	}
@@ -93,19 +98,32 @@ func LoadState(root string) (State, error) {
 	if err := json.Unmarshal(body, &state); err != nil {
 		return State{}, fmt.Errorf("parse state: %w", err)
 	}
+	if err := project.checkOwner(state.Project, state.Environment); err != nil {
+		return State{}, err
+	}
 	return state, nil
 }
 
 func SaveState(root string, state State) error {
-	state.UpdatedAt = time.Now().UTC()
-	if err := os.MkdirAll(filepath.Dir(statePath(root)), 0755); err != nil {
-		return fmt.Errorf("create .deploy: %w", err)
+	project := Project{Name: state.Project, Environment: state.Environment}
+	if err := project.validate(); err != nil {
+		return err
 	}
-	return writeJSON(statePath(root), state)
+	state.UpdatedAt = time.Now().UTC()
+	if err := os.MkdirAll(project.localDir(root), 0755); err != nil {
+		return fmt.Errorf("create deployment state directory: %w", err)
+	}
+	return writeJSON(statePath(root, project), state)
 }
 
-func LoadRelease(root string, releaseID string) (ReleaseRecord, error) {
-	body, err := os.ReadFile(releaseMetadataPath(root, releaseID))
+func LoadRelease(root string, project Project, releaseID string) (ReleaseRecord, error) {
+	if err := project.validate(); err != nil {
+		return ReleaseRecord{}, err
+	}
+	if err := validateReleaseID(releaseID); err != nil {
+		return ReleaseRecord{}, err
+	}
+	body, err := os.ReadFile(releaseMetadataPath(root, project, releaseID))
 	if err != nil {
 		return ReleaseRecord{}, fmt.Errorf("read release %s: %w", releaseID, err)
 	}
@@ -113,23 +131,59 @@ func LoadRelease(root string, releaseID string) (ReleaseRecord, error) {
 	if err := json.Unmarshal(body, &record); err != nil {
 		return ReleaseRecord{}, fmt.Errorf("parse release %s: %w", releaseID, err)
 	}
+	if err := project.checkOwner(record.Project, record.Environment); err != nil {
+		return ReleaseRecord{}, err
+	}
+	if record.ReleaseID != releaseID || filepath.Clean(record.BundlePath) != filepath.Join(project.localDir(root), "releases", releaseID) {
+		return ReleaseRecord{}, fmt.Errorf("release %s has a mismatched ID or bundle path", releaseID)
+	}
+	for _, host := range record.Hosts {
+		if host.RemoteDir != remoteReleaseDir(project, releaseID) {
+			return ReleaseRecord{}, fmt.Errorf("release %s has a mismatched remote directory", releaseID)
+		}
+	}
 	return record, nil
 }
 
 func SaveRelease(root string, record ReleaseRecord) error {
+	project := Project{Name: record.Project, Environment: record.Environment}
+	if err := project.validate(); err != nil {
+		return err
+	}
+	if err := validateReleaseID(record.ReleaseID); err != nil {
+		return err
+	}
 	record.UpdatedAt = time.Now().UTC()
-	if err := os.MkdirAll(filepath.Dir(releaseMetadataPath(root, record.ReleaseID)), 0755); err != nil {
+	path := releaseMetadataPath(root, project, record.ReleaseID)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("create release metadata dir: %w", err)
 	}
-	return writeJSON(releaseMetadataPath(root, record.ReleaseID), record)
+	return writeJSON(path, record)
 }
 
-func statePath(root string) string {
-	return filepath.Join(root, ".deploy", "state.json")
+func statePath(root string, project Project) string {
+	return filepath.Join(project.localDir(root), "state.json")
 }
 
-func releaseMetadataPath(root string, releaseID string) string {
-	return filepath.Join(root, ".deploy", "releases", releaseID, "metadata.json")
+func releaseMetadataPath(root string, project Project, releaseID string) string {
+	return filepath.Join(project.localDir(root), "releases", releaseID, "metadata.json")
+}
+
+func validateReleaseID(id string) error {
+	if id == "" || id == "." || id == ".." || filepath.Base(id) != id {
+		return fmt.Errorf("invalid release ID %q", id)
+	}
+	return nil
+}
+
+func checkLegacyState(root string) error {
+	path := filepath.Join(root, ".deploy", "state.json")
+	if _, err := os.Lstat(path); err == nil {
+		return fmt.Errorf("legacy deployment state at %s requires explicit migration; see deploy-cli.md", path)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check legacy state: %w", err)
+	}
+	return nil
 }
 
 func writeJSON(path string, value any) error {

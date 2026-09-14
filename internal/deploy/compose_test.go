@@ -27,7 +27,7 @@ func TestRenderBundleWritesComposeAndEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bundle.ImageTar != filepath.Join(root, ".deploy", "releases", "20260628T100000Z-abcdef1", "images", "quotes-20260628T100000Z-abcdef1.tar") {
+	if bundle.ImageTar != filepath.Join(root, ".deploy", "quotes", "prod", "releases", "20260628T100000Z-abcdef1", "images", "quotes-20260628T100000Z-abcdef1.tar") {
 		t.Fatalf("unexpected image tar %s", bundle.ImageTar)
 	}
 	if len(bundle.Hosts) != 2 {
@@ -41,7 +41,7 @@ func TestRenderBundleWritesComposeAndEnv(t *testing.T) {
 	composeText := string(compose)
 	for _, wanted := range []string{
 		"image: quotes:abcdef1234567890",
-		"- 443:3000",
+		"- 127.0.0.1:443:3000",
 		"- env/web.env",
 		"pp.release: 20260628T100000Z-abcdef1",
 	} {
@@ -346,12 +346,13 @@ func TestRunChecksSupportsCommandChecksWithEnv(t *testing.T) {
 	}
 }
 
-func TestDownProjectContainersCommandUsesProjectLabel(t *testing.T) {
-	command := downProjectContainersCommand("humanist-design")
+func TestDownProjectContainersCommandUsesProjectAndEnvironmentLabels(t *testing.T) {
+	command := downProjectContainersCommand(Project{Name: "humanist-design", Environment: "dev"})
 	for _, wanted := range []string{
 		"docker ps -aq --filter 'label=pp.project=humanist-design'",
 		"docker rm -f $ids",
-		"no containers for project humanist-design",
+		"no containers for deployment humanist-design_dev",
+		"--filter 'label=pp.environment=dev'",
 	} {
 		if !strings.Contains(command, wanted) {
 			t.Fatalf("down command missing %q: %s", wanted, command)

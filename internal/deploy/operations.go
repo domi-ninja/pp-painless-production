@@ -12,11 +12,12 @@ import (
 )
 
 type Deployer struct {
-	Root     string
-	Out      io.Writer
-	Err      io.Writer
-	Runner   Runner
-	resolver hostResolver
+	Root       string
+	Out        io.Writer
+	Err        io.Writer
+	Runner     Runner
+	resolver   hostResolver
+	ConfigPath string
 }
 
 func NewDeployer(root string, out io.Writer, errOut io.Writer) Deployer {
@@ -32,12 +33,20 @@ func NewDeployer(root string, out io.Writer, errOut io.Writer) Deployer {
 }
 
 func (d Deployer) Deploy() error {
-	plan, err := LoadPlan(d.Root, "deploy.yml")
+	plan, err := LoadPlan(d.Root, d.configPath())
 	if err != nil {
 		return err
 	}
-	state, err := LoadState(d.Root)
+	state, err := LoadState(d.Root, plan.Config.Project)
 	if err != nil {
+		return err
+	}
+	if state.CurrentReleaseID != "" {
+		if _, err := LoadRelease(d.Root, plan.Config.Project, state.CurrentReleaseID); err != nil {
+			return err
+		}
+	}
+	if err := d.checkLegacyHosts(plan); err != nil {
 		return err
 	}
 	if err := d.ResolveAutoPorts(&plan); err != nil {
@@ -86,7 +95,7 @@ func (d Deployer) Deploy() error {
 		rollbackErrors := []string{}
 		if state.CurrentReleaseID != "" {
 			fmt.Fprintf(d.Err, "apply failed; re-applying previous release %s\n", state.CurrentReleaseID)
-			previous, loadErr := LoadRelease(d.Root, state.CurrentReleaseID)
+			previous, loadErr := LoadRelease(d.Root, plan.Config.Project, state.CurrentReleaseID)
 			if loadErr != nil {
 				rollbackErrors = append(rollbackErrors, loadErr.Error())
 			} else if _, rollbackErr := d.ApplyRelease(planForRecord(plan, previous), bundleFromRecord(previous)); rollbackErr != nil {
@@ -237,7 +246,7 @@ func (d Deployer) ApplyBundle(plan Plan, bundle Bundle) error {
 		}
 		if len(host.PullServices) > 0 {
 			fmt.Fprintf(d.Out, "host %s: docker compose pull\n", host.ID)
-			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.Name) + " pull " + shellJoin(host.PullServices)
+			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.DeploymentID()) + " pull " + shellJoin(host.PullServices)
 			if err := d.Remote(host.SSH, pullCmd); err != nil {
 				return fmt.Errorf("host %s compose pull: %w", host.ID, err)
 			}
@@ -302,7 +311,7 @@ func (d Deployer) UploadLoadPull(plan Plan, bundle Bundle) error {
 		}
 		if len(host.PullServices) > 0 {
 			fmt.Fprintf(d.Out, "host %s: docker compose pull\n", host.ID)
-			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.Name) + " pull " + shellJoin(host.PullServices)
+			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.DeploymentID()) + " pull " + shellJoin(host.PullServices)
 			if err := d.Remote(host.SSH, pullCmd); err != nil {
 				return fmt.Errorf("host %s compose pull: %w", host.ID, err)
 			}
@@ -326,7 +335,7 @@ func (d Deployer) ComposeUpPhase(plan Plan, bundle Bundle, phases []string, wait
 }
 
 func (d Deployer) ComposeUp(plan Plan, host HostBundle, services []string, wait bool) error {
-	args := []string{"docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.Name) + " up -d"}
+	args := []string{"docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.DeploymentID()) + " up -d"}
 	if wait {
 		args[0] += " --wait"
 	}
@@ -512,7 +521,7 @@ func (d Deployer) ApplyRoutes(plan Plan, bundle Bundle) error {
 			continue
 		}
 		fmt.Fprintf(d.Out, "host %s: caddy route\n", host.ID)
-		routePath := "/etc/pp/proxy/routes/" + plan.Config.Project.Name + ".caddy"
+		routePath := plan.Config.Project.routePath()
 		command := "mkdir -p /etc/pp/proxy/routes && install -m 0644 " +
 			shellQuote(host.RemoteDir+"/routes.caddy") + " " + shellQuote(routePath) +
 			" && caddy reload --config /etc/caddy/Caddyfile"
@@ -532,7 +541,11 @@ func (d Deployer) Copy(local string, sshTarget string, remotePath string) error 
 }
 
 func (d Deployer) Status() error {
-	state, err := LoadState(d.Root)
+	cfg, err := LoadConfig(d.Root, d.configPath())
+	if err != nil {
+		return err
+	}
+	state, err := LoadState(d.Root, cfg.Project)
 	if err != nil {
 		return err
 	}
@@ -540,7 +553,7 @@ func (d Deployer) Status() error {
 		fmt.Fprintln(d.Out, "no deployments recorded")
 		return nil
 	}
-	record, err := LoadRelease(d.Root, state.CurrentReleaseID)
+	record, err := LoadRelease(d.Root, cfg.Project, state.CurrentReleaseID)
 	if err != nil {
 		return err
 	}
@@ -559,8 +572,14 @@ func (d Deployer) Status() error {
 }
 
 func (d Deployer) Down() error {
-	plan, err := LoadPlan(d.Root, "deploy.yml")
+	plan, err := LoadPlan(d.Root, d.configPath())
 	if err != nil {
+		return err
+	}
+	if _, err := LoadState(d.Root, plan.Config.Project); err != nil {
+		return err
+	}
+	if err := d.checkLegacyHosts(plan); err != nil {
 		return err
 	}
 
@@ -568,8 +587,8 @@ func (d Deployer) Down() error {
 		if len(host.Services) == 0 {
 			continue
 		}
-		fmt.Fprintf(d.Out, "host %s: down %s\n", host.ID, plan.Config.Project.Name)
-		if err := d.Remote(host.SSH, downProjectContainersCommand(plan.Config.Project.Name)); err != nil {
+		fmt.Fprintf(d.Out, "host %s: down %s\n", host.ID, plan.Config.Project.DeploymentID())
+		if err := d.Remote(host.SSH, downProjectContainersCommand(plan.Config.Project)); err != nil {
 			return fmt.Errorf("host %s down: %w", host.ID, err)
 		}
 	}
@@ -577,23 +596,29 @@ func (d Deployer) Down() error {
 }
 
 func (d Deployer) Rollback() error {
-	state, err := LoadState(d.Root)
+	plan, err := LoadPlan(d.Root, d.configPath())
+	if err != nil {
+		return err
+	}
+	state, err := LoadState(d.Root, plan.Config.Project)
 	if err != nil {
 		return err
 	}
 	if state.PreviousReleaseID == "" {
 		return fmt.Errorf("no previous release recorded")
 	}
-	current, _ := LoadRelease(d.Root, state.CurrentReleaseID)
-	previous, err := LoadRelease(d.Root, state.PreviousReleaseID)
+	current, err := LoadRelease(d.Root, plan.Config.Project, state.CurrentReleaseID)
 	if err != nil {
 		return err
 	}
-	plan, err := LoadPlan(d.Root, "deploy.yml")
+	previous, err := LoadRelease(d.Root, plan.Config.Project, state.PreviousReleaseID)
 	if err != nil {
 		return err
 	}
 
+	if err := d.checkLegacyHosts(plan); err != nil {
+		return err
+	}
 	if plan.Config.Migrations != nil && current.ReleaseID != "" {
 		fmt.Fprintln(d.Out, "running DB rollback")
 		image := plan.Config.Migrations.Image
@@ -654,7 +679,7 @@ func recordFromPlan(plan Plan, bundle Bundle, previousReleaseID string) ReleaseR
 		ImageTar:          bundle.ImageTar,
 		Images:            images,
 		BundlePath:        bundle.Root,
-		RemoteBase:        ".pp/" + plan.Config.Project.Name,
+		RemoteBase:        plan.Config.Project.remoteDir(),
 		Hosts:             hosts,
 		Migration:         StepRecord{Status: "skipped"},
 		Apply:             StepRecord{Status: "planned"},
@@ -760,8 +785,16 @@ func shellJoin(values []string) string {
 	return strings.Join(quoted, " ")
 }
 
-func downProjectContainersCommand(project string) string {
-	projectFilter := shellQuote("label=pp.project=" + project)
-	return "ids=$(docker ps -aq --filter " + projectFilter + "); " +
-		"if [ -n \"$ids\" ]; then docker rm -f $ids; else echo " + shellQuote("no containers for project "+project) + "; fi"
+func downProjectContainersCommand(project Project) string {
+	projectFilter := shellQuote("label=pp.project=" + project.Name)
+	environmentFilter := shellQuote("label=pp.environment=" + project.Environment)
+	return "set -eu; ids=$(docker ps -aq --filter " + projectFilter + " --filter " + environmentFilter + "); " +
+		"if [ -n \"$ids\" ]; then docker rm -f $ids; else echo " + shellQuote("no containers for deployment "+project.DeploymentID()) + "; fi"
+}
+
+func (d Deployer) configPath() string {
+	if d.ConfigPath == "" {
+		return "deploy.yml"
+	}
+	return d.ConfigPath
 }

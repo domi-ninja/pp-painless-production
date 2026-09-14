@@ -74,7 +74,7 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 	if err != nil {
 		return Bundle{}, err
 	}
-	bundleRoot := filepath.Join(root, ".deploy", "releases", plan.ReleaseID)
+	bundleRoot := filepath.Join(plan.Config.Project.localDir(root), "releases", plan.ReleaseID)
 	imagesDir := filepath.Join(bundleRoot, "images")
 	if err := os.MkdirAll(imagesDir, 0755); err != nil {
 		return Bundle{}, fmt.Errorf("create image dir: %w", err)
@@ -150,7 +150,7 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 			Compose:      composePath,
 			Routes:       routesPath,
 			EnvFiles:     envFiles,
-			RemoteDir:    remoteReleaseDir(plan.Config.Project.Name, plan.ReleaseID),
+			RemoteDir:    remoteReleaseDir(plan.Config.Project, plan.ReleaseID),
 			ServiceIDs:   hostPlan.Services,
 			PullServices: pullServices,
 		})
@@ -389,7 +389,7 @@ func renderPorts(plan Plan, hostID string, serviceID string, ports []Port) []str
 		value := strconv.Itoa(published) + ":" + strconv.Itoa(port.Target)
 		if port.HostIP != "" {
 			value = port.HostIP + ":" + value
-		} else if port.Published.Auto {
+		} else {
 			value = "127.0.0.1:" + value
 		}
 		out = append(out, value)
@@ -463,6 +463,6 @@ func writeYAML(path string, value any) error {
 	return nil
 }
 
-func remoteReleaseDir(project string, releaseID string) string {
-	return ".pp/" + project + "/releases/" + releaseID
+func remoteReleaseDir(project Project, releaseID string) string {
+	return project.remoteDir() + "/releases/" + releaseID
 }

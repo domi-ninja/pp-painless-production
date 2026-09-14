@@ -97,6 +97,7 @@ func (p Plan) AutoPort(hostID string, serviceID string, target int) (int, bool) 
 func PrintPlan(w io.Writer, plan Plan) {
 	fmt.Fprintf(w, "project: %s\n", plan.Config.Project.Name)
 	fmt.Fprintf(w, "environment: %s\n", plan.Config.Project.Environment)
+	fmt.Fprintf(w, "deployment: %s\n", plan.Config.Project.DeploymentID())
 	fmt.Fprintf(w, "release: %s\n", plan.ReleaseID)
 	fmt.Fprintf(w, "git_sha: %s\n", plan.Git.SHA)
 	fmt.Fprintf(w, "dirty: %t\n", plan.Git.Dirty)

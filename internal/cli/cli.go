@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -14,19 +15,33 @@ func Main(name string, args []string, stdout io.Writer, stderr io.Writer) int {
 		args = []string{"deploy"}
 	}
 
-	switch args[0] {
+	command := args[0]
+	flags := flag.NewFlagSet(name+" "+command, flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "deploy.yml", "deployment config, relative to the working directory")
+	if err := flags.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != 0 {
+		fmt.Fprintln(stderr, "unexpected arguments:", flags.Args())
+		return 2
+	}
+	switch command {
 	case "deploy":
-		return runDeploy(stdout, stderr)
+		return runDeploy(*configPath, stdout, stderr)
 	case "down":
-		return runDown(stdout, stderr)
+		return runDown(*configPath, stdout, stderr)
 	case "init":
-		return runInit(stdout, stderr)
+		return runInit(*configPath, stdout, stderr)
 	case "plan":
-		return runPlan(stdout, stderr)
+		return runPlan(*configPath, stdout, stderr)
 	case "status":
-		return runStatus(stdout, stderr)
+		return runStatus(*configPath, stdout, stderr)
 	case "rollback":
-		return runRollback(stdout, stderr)
+		return runRollback(*configPath, stdout, stderr)
 	case "-h", "--help", "help":
 		printHelp(name, stdout)
 		return 0
@@ -37,40 +52,40 @@ func Main(name string, args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 }
 
-func runDown(stdout io.Writer, stderr io.Writer) int {
+func runDown(configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := deploy.NewDeployer(wd, stdout, stderr).Down(); err != nil {
+	if err := configuredDeployer(wd, configPath, stdout, stderr).Down(); err != nil {
 		printError(stderr, err)
 		return 1
 	}
 	return 0
 }
 
-func runDeploy(stdout io.Writer, stderr io.Writer) int {
+func runDeploy(configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := deploy.NewDeployer(wd, stdout, stderr).Deploy(); err != nil {
+	if err := configuredDeployer(wd, configPath, stdout, stderr).Deploy(); err != nil {
 		printError(stderr, err)
 		return 1
 	}
 	return 0
 }
 
-func runInit(stdout io.Writer, stderr io.Writer) int {
+func runInit(configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
 
-	result, err := deploy.InitConfig(wd, "deploy.yml")
+	result, err := deploy.InitConfig(wd, configPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
@@ -81,40 +96,40 @@ func runInit(stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func runStatus(stdout io.Writer, stderr io.Writer) int {
+func runStatus(configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := deploy.NewDeployer(wd, stdout, stderr).Status(); err != nil {
+	if err := configuredDeployer(wd, configPath, stdout, stderr).Status(); err != nil {
 		printError(stderr, err)
 		return 1
 	}
 	return 0
 }
 
-func runRollback(stdout io.Writer, stderr io.Writer) int {
+func runRollback(configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := deploy.NewDeployer(wd, stdout, stderr).Rollback(); err != nil {
+	if err := configuredDeployer(wd, configPath, stdout, stderr).Rollback(); err != nil {
 		printError(stderr, err)
 		return 1
 	}
 	return 0
 }
 
-func runPlan(stdout io.Writer, stderr io.Writer) int {
+func runPlan(configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
 
-	plan, err := deploy.LoadPlan(wd, "deploy.yml")
+	plan, err := deploy.LoadPlan(wd, configPath)
 	if err != nil {
 		var validationErr deploy.ValidationError
 		if errors.As(err, &validationErr) {
@@ -140,13 +155,19 @@ func printError(stderr io.Writer, err error) {
 }
 
 func printHelp(name string, w io.Writer) {
-	fmt.Fprintf(w, "usage: %s <command>\n", name)
+	fmt.Fprintf(w, "usage: %s <command> [--config deploy.yml]\n", name)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "commands:")
 	fmt.Fprintln(w, "  deploy    build, transfer, and apply the release")
-	fmt.Fprintln(w, "  down      remove all remote containers for the project")
+	fmt.Fprintln(w, "  down      remove remote containers for the selected project/environment")
 	fmt.Fprintln(w, "  init      create a starter deploy.yml")
 	fmt.Fprintln(w, "  plan      validate deploy.yml and print host/service placement")
 	fmt.Fprintln(w, "  status    show local deployment state")
 	fmt.Fprintln(w, "  rollback  restore previous code and DB state")
+}
+
+func configuredDeployer(root, configPath string, stdout, stderr io.Writer) deploy.Deployer {
+	deployer := deploy.NewDeployer(root, stdout, stderr)
+	deployer.ConfigPath = configPath
+	return deployer
 }

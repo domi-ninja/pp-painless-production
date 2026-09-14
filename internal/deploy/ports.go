@@ -17,7 +17,7 @@ func (d Deployer) ResolveAutoPorts(plan *Plan) error {
 				if !port.Published.Auto {
 					continue
 				}
-				key := plan.Config.Project.Name + ":" + serviceID + ":" + strconv.Itoa(port.Target)
+				key := plan.Config.Project.DeploymentID() + ":" + serviceID + ":" + strconv.Itoa(port.Target)
 				published, err := d.AllocateRemotePort(hostPlan.SSH, key)
 				if err != nil {
 					return fmt.Errorf("allocate port for %s on %s: %w", key, hostPlan.ID, err)
