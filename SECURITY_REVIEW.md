@@ -8,7 +8,7 @@ Findings 1 and 2 are fixed in the CLI. Findings 3 through 6 remain open.
 
 2. **Fixed: fixed ports defaulted to public access.** Fixed and automatic ports now default to `127.0.0.1`; public bindings require an explicit `host_ip`. Humanist already uses loopback behind host-level Caddy, and all seven live smoke checks passed on 2026-09-14. Existing fixed ports change on their next deployment. [Code](internal/deploy/compose.go#L378)
 
-3. **Medium: uploaded secrets can be readable by other host users.** Rendered Compose files contain passwords and use `0644`; remote directories have no enforced private mode. Exposure depends on home-directory permissions and umask. Enforce `0700` directories and `0600` secret files. [Code](internal/deploy/operations.go#L497)
+3. **Medium: uploaded secrets can be readable by other host users.** Rendered Compose files contain passwords and use `0644`; remote directories have no enforced private mode. Exposure depends on home-directory permissions and umask. Enforce `0700` directories and `0600` secret files. [Code](internal/deploy/operations.go#L520)
 
 4. **Medium: services receive unrelated secrets.** `env.required` validates presence, but the renderer copies every source key. The Convex example gives Postgres and MinIO each other's credentials and the Convex instance secret. Use separate service env files or explicit key selection. [Code](internal/deploy/compose.go#L349)
 

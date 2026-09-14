@@ -248,12 +248,8 @@ func (d Deployer) ApplyBundle(plan Plan, bundle Bundle) error {
 				return fmt.Errorf("host %s docker load: %w", host.ID, err)
 			}
 		}
-		if len(host.PullServices) > 0 {
-			fmt.Fprintf(d.Out, "host %s: docker compose pull\n", host.ID)
-			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " pull " + shellJoin(host.PullServices)
-			if err := d.Remote(host.SSH, pullCmd); err != nil {
-				return fmt.Errorf("host %s compose pull: %w", host.ID, err)
-			}
+		if err := d.PullHostImages(plan, host); err != nil {
+			return err
 		}
 		fmt.Fprintf(d.Out, "host %s: compose up\n", host.ID)
 		if err := d.ComposeUp(plan, host, nil, false); err != nil {
@@ -313,12 +309,8 @@ func (d Deployer) UploadLoadPull(plan Plan, bundle Bundle) error {
 				return fmt.Errorf("host %s docker load: %w", host.ID, err)
 			}
 		}
-		if len(host.PullServices) > 0 {
-			fmt.Fprintf(d.Out, "host %s: docker compose pull\n", host.ID)
-			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " pull " + shellJoin(host.PullServices)
-			if err := d.Remote(host.SSH, pullCmd); err != nil {
-				return fmt.Errorf("host %s compose pull: %w", host.ID, err)
-			}
+		if err := d.PullHostImages(plan, host); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -338,8 +330,39 @@ func (d Deployer) ComposeUpPhase(plan Plan, bundle Bundle, phases []string, wait
 	return nil
 }
 
+func (d Deployer) PullHostImages(plan Plan, host HostBundle) error {
+	if len(host.PullServices) == 0 {
+		return nil
+	}
+	fmt.Fprintf(d.Out, "host %s: checking images\n", host.ID)
+	if err := d.Runner.SSHScript(d.Root, host.SSH, pullHostImagesScript(plan, host)); err != nil {
+		return fmt.Errorf("host %s image pull: %w", host.ID, err)
+	}
+	return nil
+}
+
+// Inspect the resolved image locally: Compose's missing policy still pulls :latest.
+func pullHostImagesScript(plan Plan, host HostBundle) string {
+	compose := "docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID())
+	script := "set -eu\ncd " + shellQuote(host.RemoteDir) + "\n"
+	for _, serviceID := range host.PullServices {
+		service := shellQuote(serviceID)
+		pull := compose + " pull --policy always " + service + "\n"
+		switch plan.Config.Services[serviceID].Pull {
+		case "always":
+			script += pull
+		case "if_missing":
+			script += "image=$(" + compose + " config --images " + service + ")\n" +
+				"if docker image inspect \"$image\" >/dev/null 2>&1; then\n" +
+				"  printf 'using cached image %s\\n' \"$image\"\n" +
+				"else\n  " + pull + "fi\n"
+		}
+	}
+	return script
+}
+
 func (d Deployer) ComposeUp(plan Plan, host HostBundle, services []string, wait bool) error {
-	args := []string{"docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " up -d"}
+	args := []string{"docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " up -d --pull never"}
 	if wait {
 		args[0] += " --wait"
 	}

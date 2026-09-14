@@ -17,6 +17,8 @@ Go implementation of the side-project deployment system.
 
 `deploy` builds the configured Docker image locally, exports it to `.deploy/<project>/<environment>/releases/<release>/images/`, renders per-host compose bundles, transfers bundles and image tar files over SSH, runs `docker load`, then runs `docker compose up -d` on each host. After a successful deployment, it prints the resolved IP addresses for each deployment domain.
 
+For upstream images, `pull: if_missing` checks the host's image cache before pulling, including `:latest`. `pull: always` refreshes the image; `pull: never` or an omitted policy requires an image already loaded on the host. Compose startup never pulls a second time. Rollback uses saved bundles and available images without refreshing upstream tags.
+
 Use `published: auto` for route-backed services. `pp` allocates a stable localhost backend port from `18000-19999`, stores it on the host under `/etc/pp/ports.tsv`, and renders Caddy routes to the allocated port.
 
 Both fixed and automatic ports bind to `127.0.0.1` unless `host_ip` is explicit. Host-level Caddy can reach these ports while serving public HTTPS. To expose a container directly, set `host_ip: 0.0.0.0` or a specific host address. Existing fixed ports without `host_ip` become loopback-only on their next deployment. A proxy on another host or in a separate container network needs an explicitly reachable address.

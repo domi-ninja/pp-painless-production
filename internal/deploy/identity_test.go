@@ -145,7 +145,7 @@ func TestRemoteCommandsUseSelectedEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"key='shop_dev:web:80'", "key='shop_prod:web:80'", "key='shop:web:80'", "-p 'shop_dev'", "-p 'shop_prod'", "-p 'shop'", "/routes/shop_dev.caddy", "/routes/shop_prod.caddy", "/routes/shop.caddy", "label=pp.environment=dev", "label=pp.environment=prod"} {
+	for _, want := range []string{"key='shop_dev:web:80'", "key='shop_prod:web:80'", "key='shop:web:80'", "-p 'shop_dev'", "-p 'shop_prod'", "-p 'shop'", "up -d --pull never", "/routes/shop_dev.caddy", "/routes/shop_prod.caddy", "/routes/shop.caddy", "label=pp.environment=dev", "label=pp.environment=prod"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("missing %q in commands", want)
 		}
