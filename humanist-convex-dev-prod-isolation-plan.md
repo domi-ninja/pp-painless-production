@@ -1,6 +1,6 @@
 # Humanist Self-Hosted Convex Dev/Prod Isolation Plan
 
-Status: historical proposal, not executed. As of 2026-09-10, the CLI supports separate configs and project/environment isolation. Prefer independent dev and prod deployments using `--config`; the shared-deployment design below needs revision before implementation. See [migration instructions](deploy-cli.md#migrating-an-existing-deployment).
+Historical proposal, superseded by independent project/environment deployments. On 2026-09-14, production migrated to `humanist-design_prod`; no permanent remote dev stack was created. The CLI supports `--config` and scopes state, rollback and shutdown by project and environment. The shared-deployment design and open questions below are historical, not rollout instructions. See [current deployment notes](humanist-convex-pp-deployment-notes.md) and [migration instructions](deploy-cli.md#migrating-an-existing-deployment).
 
 ## Decision
 

@@ -1,5 +1,7 @@
 # Deployment Pipeline Plan
 
+Design plan, not a description of every implemented feature. See [current CLI behavior](deploy-cli.md) for supported commands and migration requirements.
+
 ## Goal
 
 Param-less Go deploy CLI for side projects: local development uses a separate dev DB, release builds happen locally, production migrations run explicitly against prod DB inside the built app container, and production is updated across multiple bare-metal Docker hosts with predictable state tracking.
@@ -39,9 +41,10 @@ Param-less Go deploy CLI for side projects: local development uses a separate de
 ## Host State
 
 - SSH is the only control path: status reads, image/bundle transfer, compose apply, and Caddy reload all run over SSH.
-- Local release metadata lives under `.deploy/releases/`.
+- Local release metadata lives under `.deploy/<project>/<environment>/releases/`.
 - Host-local runtime state lives under `/etc/pp`, including proxy routes and auto port allocation.
 - Auto backend ports are allocated from `127.0.0.1:18000-19999` and recorded in `/etc/pp/ports.tsv` under a file lock.
+- Fixed ports also default to loopback. Direct public bindings require an explicit `host_ip`.
 
 ## Deploy Flow
 

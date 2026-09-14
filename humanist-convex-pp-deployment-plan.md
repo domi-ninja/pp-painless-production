@@ -1,5 +1,7 @@
 # Humanist Convex/Vite `pp` Deployment Plan
 
+Historical implementation plan. Production migrated to environment-scoped deployment on 2026-09-14. Commands, env files and paths below describe the original design; use [deployment notes](humanist-convex-pp-deployment-notes.md) for current operation.
+
 Goal: create a lightweight Docker deployment process for `../humanist.design` using the `pp` deploy command in this repo. The process should deploy the Vite frontend plus a self-hosted Convex backend/dashboard, Postgres, and S3-compatible object storage, push `.env.local` values into Convex, run the Convex CLI so production functions/schema are current, and apply everything over SSH without introducing a project-owned image registry or heavyweight platform.
 
 Confirmed target: `p2.domi.ninja` is the working reference implementation. The new automated deployment should go to `p3.domi.ninja`, using SSH target `deploy@p3.domi.ninja`.

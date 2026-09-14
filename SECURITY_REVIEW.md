@@ -8,7 +8,7 @@ Findings 1 and 2 are fixed in the CLI. Findings 3 through 6 remain open.
 
 2. **Fixed: fixed ports defaulted to public access.** Fixed and automatic ports now default to `127.0.0.1`; public bindings require an explicit `host_ip`. Humanist already uses loopback behind host-level Caddy, and all seven live smoke checks passed on 2026-09-14. Existing fixed ports change on their next deployment. [Code](internal/deploy/compose.go#L378)
 
-3. **Medium: uploaded secrets can be readable by other host users.** Rendered Compose files contain passwords and use `0644`; remote directories have no enforced private mode. Exposure depends on home-directory permissions and umask. Enforce `0700` directories and `0600` secret files. [Code](internal/deploy/operations.go#L484)
+3. **Medium: uploaded secrets can be readable by other host users.** Rendered Compose files contain passwords and use `0644`; remote directories have no enforced private mode. Exposure depends on home-directory permissions and umask. Enforce `0700` directories and `0600` secret files. [Code](internal/deploy/operations.go#L493)
 
 4. **Medium: services receive unrelated secrets.** `env.required` validates presence, but the renderer copies every source key. The Convex example gives Postgres and MinIO each other's credentials and the Convex instance secret. Use separate service env files or explicit key selection. [Code](internal/deploy/compose.go#L349)
 
@@ -16,4 +16,4 @@ Findings 1 and 2 are fixed in the CLI. Findings 3 through 6 remain open.
 
 6. **Medium: Compose changes literal passwords.** Compose reinterprets `$NAME` and `${NAME}` after the CLI renders credentials. A dummy `prefix${UNSET}suffix` became `prefixsuffix`, risking failed authentication or unintended passwords. Escape literal dollars in YAML and preserve literal env-file values. [Code](internal/deploy/compose.go#L416) · [Compose behavior](https://docs.docker.com/reference/compose-file/interpolation/)
 
-Original checks: `go test ./...` and `go vet ./...` passed. Local checks reproduced shell execution and password interpolation. No live infrastructure was tested or changed. Dependency and image vulnerability scans remain outstanding.
+Validation: Go tests and vet passed. Humanist's migration, seven live smoke checks and a Convex WebSocket subscription passed on 2026-09-14. Findings 5 and 6 were reproduced locally. Dependency and image vulnerability scans remain outstanding.

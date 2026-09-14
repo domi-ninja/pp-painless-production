@@ -10,6 +10,7 @@ Go implementation of the side-project deployment system.
 - `go run ./cmd/deploy deploy`
 - `go run ./cmd/deploy status`
 - `go run ./cmd/deploy rollback`
+- `go run ./cmd/deploy down`
 - Installed locally as `pp`.
 
 `deploy plan` loads `deploy.yml`, validates schema references and required env values, reads git metadata, computes a timestamp-plus-SHA release ID, and prints host/service placement.

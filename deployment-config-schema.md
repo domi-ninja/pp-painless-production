@@ -1,5 +1,7 @@
 # Deployment Config Schema Draft
 
+This draft includes proposed behavior. See [current CLI behavior](deploy-cli.md) for implemented features and environment isolation.
+
 ## File
 
 Default path: `deploy.yml`
@@ -102,6 +104,7 @@ checks:
 - Runtime environment is provisioned into containers by the deploy system; v1 may render strict-permission host env files, but services should only depend on container env vars.
 - `ports`, `volumes`, `command`, `entrypoint`, `restart`, `labels`, and `depends_on` map closely to Docker Compose.
 - `ports.*.published` may be a fixed number or `auto`.
+- Both default to `host_ip: 127.0.0.1`. Set `host_ip: 0.0.0.0` explicitly for direct public access.
 - `published: auto` allocates a stable host-local backend port from `18000-19999`.
 - Cross-host dependencies must use URLs or external service addresses; generated Docker networks are host-local only.
 
@@ -139,7 +142,7 @@ checks:
 Per deployment, the CLI creates a local bundle:
 
 ```text
-.deploy/releases/<release-id>/
+.deploy/<project>/<environment>/releases/<release-id>/
   deploy.yml
   metadata.json
   images/

@@ -96,6 +96,7 @@ go run ./cmd/deploy plan
 go run ./cmd/deploy deploy
 go run ./cmd/deploy status
 go run ./cmd/deploy rollback
+go run ./cmd/deploy down
 ```
 
 See [`examples/`](examples/) for simple website and stateful Go configurations, plus a more complex setup for running Convex in self-hosted mode.
@@ -110,6 +111,8 @@ The normal path is config-driven:
 - deployment metadata is recorded for status and rollback
 
 `pp` owns application release state such as `.deploy/<project>/<environment>/releases/<release-id>/` locally and the uploaded release bundle on each target host. Use `pp deploy --config deploy.dev.yml` to select an environment's config. Existing deployments need the [environment isolation migration](deploy-cli.md#migrating-an-existing-deployment). It should not mutate base OS settings, install Forgejo, or manage platform services.
+
+Published ports default to `127.0.0.1`, including fixed port numbers. Host-level Caddy serves public HTTPS; direct public access requires an explicit `host_ip`. See [current CLI behavior](deploy-cli.md) before upgrading an existing deployment.
 
 ## Practical Split
 
