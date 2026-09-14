@@ -37,6 +37,9 @@ func (d Deployer) Deploy() error {
 	if err != nil {
 		return err
 	}
+	if plan.Config.Project.ResourceID() == plan.Config.Project.Name {
+		fmt.Fprintf(d.Out, "state v%d: using existing resources %s for %s/%s; release history preserved\n", CurrentStateVersion, plan.Config.Project.ResourceID(), plan.Config.Project.Name, plan.Config.Project.Environment)
+	}
 	state, err := LoadState(d.Root, plan.Config.Project)
 	if err != nil {
 		return err
@@ -129,6 +132,7 @@ func (d Deployer) Deploy() error {
 		return err
 	}
 	if err := SaveState(d.Root, State{
+		ResourceID:        plan.Config.Project.ResourceID(),
 		Project:           plan.Config.Project.Name,
 		Environment:       plan.Config.Project.Environment,
 		CurrentReleaseID:  plan.ReleaseID,
@@ -246,7 +250,7 @@ func (d Deployer) ApplyBundle(plan Plan, bundle Bundle) error {
 		}
 		if len(host.PullServices) > 0 {
 			fmt.Fprintf(d.Out, "host %s: docker compose pull\n", host.ID)
-			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.DeploymentID()) + " pull " + shellJoin(host.PullServices)
+			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " pull " + shellJoin(host.PullServices)
 			if err := d.Remote(host.SSH, pullCmd); err != nil {
 				return fmt.Errorf("host %s compose pull: %w", host.ID, err)
 			}
@@ -311,7 +315,7 @@ func (d Deployer) UploadLoadPull(plan Plan, bundle Bundle) error {
 		}
 		if len(host.PullServices) > 0 {
 			fmt.Fprintf(d.Out, "host %s: docker compose pull\n", host.ID)
-			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.DeploymentID()) + " pull " + shellJoin(host.PullServices)
+			pullCmd := "cd " + shellQuote(host.RemoteDir) + " && docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " pull " + shellJoin(host.PullServices)
 			if err := d.Remote(host.SSH, pullCmd); err != nil {
 				return fmt.Errorf("host %s compose pull: %w", host.ID, err)
 			}
@@ -335,7 +339,7 @@ func (d Deployer) ComposeUpPhase(plan Plan, bundle Bundle, phases []string, wait
 }
 
 func (d Deployer) ComposeUp(plan Plan, host HostBundle, services []string, wait bool) error {
-	args := []string{"docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.DeploymentID()) + " up -d"}
+	args := []string{"docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " up -d"}
 	if wait {
 		args[0] += " --wait"
 	}
@@ -559,6 +563,7 @@ func (d Deployer) Status() error {
 	}
 	fmt.Fprintf(d.Out, "project: %s\n", state.Project)
 	fmt.Fprintf(d.Out, "environment: %s\n", state.Environment)
+	fmt.Fprintf(d.Out, "state_version: %d\nresources: %s\n", state.Version, state.ResourceID)
 	fmt.Fprintf(d.Out, "current: %s\n", state.CurrentReleaseID)
 	fmt.Fprintf(d.Out, "previous: %s\n", emptyDash(state.PreviousReleaseID))
 	fmt.Fprintf(d.Out, "status: %s\n", record.Status)
@@ -642,6 +647,7 @@ func (d Deployer) Rollback() error {
 		return err
 	}
 	return SaveState(d.Root, State{
+		ResourceID:        previous.ResourceID,
 		Project:           previous.Project,
 		Environment:       previous.Environment,
 		CurrentReleaseID:  previous.ReleaseID,
@@ -670,6 +676,8 @@ func recordFromPlan(plan Plan, bundle Bundle, previousReleaseID string) ReleaseR
 	}
 	now := time.Now().UTC()
 	return ReleaseRecord{
+		Version:           CurrentStateVersion,
+		ResourceID:        plan.Config.Project.ResourceID(),
 		Project:           plan.Config.Project.Name,
 		Environment:       plan.Config.Project.Environment,
 		ReleaseID:         plan.ReleaseID,
@@ -726,6 +734,7 @@ func bundleFromRecord(record ReleaseRecord) Bundle {
 }
 
 func planForRecord(base Plan, record ReleaseRecord) Plan {
+	base.Config.Project.resourceID = record.ResourceID
 	base.ReleaseID = record.ReleaseID
 	base.Git = record.Git
 	return base

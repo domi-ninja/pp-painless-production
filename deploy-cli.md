@@ -34,7 +34,7 @@ pp rollback --config deploy.dev.yml
 pp down --config deploy.dev.yml
 ```
 
-For project `shop`, environment `dev`:
+For a new deployment of project `shop`, environment `dev`:
 
 | Resource | Identity or location |
 | --- | --- |
@@ -50,13 +50,16 @@ Explicit bind paths, external volumes, fixed ports, image tags, domains and cred
 
 ## Migrating an existing deployment
 
-The naming change requires a planned cutover. The CLI refuses legacy local state, old Compose containers or an old project-only route file before making deployment changes. Legacy Compose volumes also block deployment until their migration is acknowledged. Checks run on every configured host before builds, migrations or port allocation.
+Run `pp` as usual. Local state upgrades automatically before deployment. `pp status` or `pp plan` can perform the local upgrade without changing the running site.
 
-1. Back up persistent data and keep the old CLI and release bundles for recovery. Inventory the old containers, volume names, routes and allocated ports.
-2. Prepare separate environment configs and update helper scripts. Decide how each existing volume maps to the new deployment. Copy data into the new managed volume or explicitly reference an existing volume as external; changing a Compose name does not migrate data.
-3. During the cutover, stop and remove only the old deployment's containers, preserving volumes. Archive its project-only Caddy route outside the imported route directory and reload Caddy. Avoid running old and new containers against the same writable data.
-4. Archive the old local `.deploy/state.json` and release bundles outside `.deploy/`. Do not copy old metadata into the new state directory. The first new deployment starts a fresh rollback history.
-5. If retaining old Compose volumes, create `.pp/<project>/.environment-isolation-migrated` on each affected host after checking their mappings. This acknowledges retained volumes; it does not bypass checks for old containers or routes.
-6. Deploy the selected environment, verify its data and routes, then deploy the other environment with separate storage and credentials. Automatic ports receive new keys and may change. Keep backups until verification passes.
+- Config remains version `1`; omitting `version` means `1`. The CLI does not rewrite your YAML.
+- State and release metadata use version `2`. Unversioned files are v1. Unknown newer versions fail before deployment and ask you to upgrade `pp`.
+- Legacy `.deploy/state.json` identifies the owning project and environment. The CLI copies that environment's release metadata into `.deploy/<project>/<environment>/` and preserves current and previous release IDs.
+- Existing deployments retain their Compose name, managed volumes, port allocation keys, route filename and remote release paths. State records this stable `resource_id`. New environments get `<project>_<environment>` resources.
+- Original state and bundles stay in place. Imported records still reference the old bundles, so do not delete `.deploy/releases/`. Upgrades of already-scoped v1 files keep `.v1.bak` copies. Writes are atomic; concurrent local migration attempts share a lock.
 
-No data migration or legacy-resource deletion happens automatically.
+Before deployment, the CLI checks container ownership on every host. It then records a versioned claim at `.pp/<project>/resource-owner` for adopted resources. A second environment or checkout cannot claim the same resources. Run the original environment once before adding another environment beside legacy resources.
+
+Missing release records, conflicting ownership, or both old and new container layouts require investigation. The CLI will not guess, delete volumes or start a replacement database. A deployment already migrated to scoped resources, such as Humanist production, keeps its current identity.
+
+For future format changes, add an explicit version migration and tests. Reading an old format must not silently rename infrastructure or discard rollback history. Config and state versions advance independently.

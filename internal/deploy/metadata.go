@@ -10,6 +10,8 @@ import (
 )
 
 type ReleaseRecord struct {
+	Version           int           `json:"version"`
+	ResourceID        string        `json:"resource_id"`
 	Project           string        `json:"project"`
 	Environment       string        `json:"environment"`
 	ReleaseID         string        `json:"release_id"`
@@ -73,6 +75,8 @@ type CheckRecord struct {
 }
 
 type State struct {
+	Version           int       `json:"version"`
+	ResourceID        string    `json:"resource_id"`
 	Project           string    `json:"project"`
 	Environment       string    `json:"environment"`
 	CurrentReleaseID  string    `json:"current_release_id,omitempty"`
@@ -84,7 +88,7 @@ func LoadState(root string, project Project) (State, error) {
 	if err := project.validate(); err != nil {
 		return State{}, err
 	}
-	if err := checkLegacyState(root); err != nil {
+	if err := migrateState(root, project); err != nil {
 		return State{}, err
 	}
 	body, err := os.ReadFile(statePath(root, project))
@@ -101,10 +105,16 @@ func LoadState(root string, project Project) (State, error) {
 	if err := project.checkOwner(state.Project, state.Environment); err != nil {
 		return State{}, err
 	}
+	if err := upgradeState(&state); err != nil {
+		return State{}, err
+	}
 	return state, nil
 }
 
 func SaveState(root string, state State) error {
+	if err := upgradeState(&state); err != nil {
+		return err
+	}
 	project := Project{Name: state.Project, Environment: state.Environment}
 	if err := project.validate(); err != nil {
 		return err
@@ -123,6 +133,13 @@ func LoadRelease(root string, project Project, releaseID string) (ReleaseRecord,
 	if err := validateReleaseID(releaseID); err != nil {
 		return ReleaseRecord{}, err
 	}
+	state, err := LoadState(root, project)
+	if err != nil {
+		return ReleaseRecord{}, err
+	}
+	if project.resourceID == "" {
+		project.resourceID = state.ResourceID
+	}
 	body, err := os.ReadFile(releaseMetadataPath(root, project, releaseID))
 	if err != nil {
 		return ReleaseRecord{}, fmt.Errorf("read release %s: %w", releaseID, err)
@@ -134,18 +151,49 @@ func LoadRelease(root string, project Project, releaseID string) (ReleaseRecord,
 	if err := project.checkOwner(record.Project, record.Environment); err != nil {
 		return ReleaseRecord{}, err
 	}
-	if record.ReleaseID != releaseID || filepath.Clean(record.BundlePath) != filepath.Join(project.localDir(root), "releases", releaseID) {
-		return ReleaseRecord{}, fmt.Errorf("release %s has a mismatched ID or bundle path", releaseID)
+	originalVersion := record.Version
+	if err := upgradeRelease(&record); err != nil {
+		return ReleaseRecord{}, err
 	}
-	for _, host := range record.Hosts {
-		if host.RemoteDir != remoteReleaseDir(project, releaseID) {
-			return ReleaseRecord{}, fmt.Errorf("release %s has a mismatched remote directory", releaseID)
+	if record.ResourceID != project.ResourceID() {
+		return ReleaseRecord{}, fmt.Errorf("release %s has a mismatched resource identity", releaseID)
+	}
+	if err := validateRecordPaths(root, project, releaseID, record); err != nil {
+		return ReleaseRecord{}, err
+	}
+	if originalVersion != record.Version {
+		path := releaseMetadataPath(root, project, releaseID)
+		if err := backupVersion(path, body); err != nil {
+			return ReleaseRecord{}, err
+		}
+		if err := writeJSON(path, record); err != nil {
+			return ReleaseRecord{}, err
 		}
 	}
 	return record, nil
 }
 
+func validateRecordPaths(root string, project Project, releaseID string, record ReleaseRecord) error {
+	bundlePath := filepath.Clean(record.BundlePath)
+	validBundle := bundlePath == filepath.Join(project.localDir(root), "releases", releaseID)
+	if project.ResourceID() == project.Name {
+		validBundle = validBundle || bundlePath == filepath.Join(root, ".deploy", "releases", releaseID)
+	}
+	if record.ReleaseID != releaseID || !validBundle {
+		return fmt.Errorf("release %s has a mismatched ID or bundle path", releaseID)
+	}
+	for _, host := range record.Hosts {
+		if host.RemoteDir != remoteReleaseDir(project, releaseID) {
+			return fmt.Errorf("release %s has a mismatched remote directory", releaseID)
+		}
+	}
+	return nil
+}
+
 func SaveRelease(root string, record ReleaseRecord) error {
+	if err := upgradeRelease(&record); err != nil {
+		return err
+	}
 	project := Project{Name: record.Project, Environment: record.Environment}
 	if err := project.validate(); err != nil {
 		return err
@@ -176,23 +224,13 @@ func validateReleaseID(id string) error {
 	return nil
 }
 
-func checkLegacyState(root string) error {
-	path := filepath.Join(root, ".deploy", "state.json")
-	if _, err := os.Lstat(path); err == nil {
-		return fmt.Errorf("legacy deployment state at %s requires explicit migration; see deploy-cli.md", path)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("check legacy state: %w", err)
-	}
-	return nil
-}
-
 func writeJSON(path string, value any) error {
 	body, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode %s: %w", path, err)
 	}
 	body = append(body, '\n')
-	if err := os.WriteFile(path, body, 0644); err != nil {
+	if err := atomicWrite(path, body); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil

@@ -6,6 +6,8 @@ This draft includes proposed behavior. See [current CLI behavior](deploy-cli.md)
 
 Default path: `deploy.yml`
 
+Config schema version is `1`; a missing `version` defaults to `1`. State and release metadata have independent versions and upgrade automatically. See [format migrations](deploy-cli.md#migrating-an-existing-deployment).
+
 Purpose: committed desired state for one deployable project. Secrets stay in `.env` or a later secret provider, then are provisioned into runtime containers by the deploy system.
 
 ## Example

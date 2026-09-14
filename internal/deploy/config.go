@@ -31,6 +31,7 @@ type Config struct {
 type Project struct {
 	Name        string `yaml:"name"`
 	Environment string `yaml:"environment"`
+	resourceID  string
 }
 
 type Build struct {
@@ -197,7 +198,7 @@ func LoadConfig(root string, configPath string) (Config, error) {
 		return Config{}, fmt.Errorf("read %s: %w", configPath, err)
 	}
 
-	var cfg Config
+	cfg := Config{Version: CurrentConfigVersion}
 	if err := yaml.Unmarshal(body, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse %s: %w", configPath, err)
 	}
@@ -212,8 +213,8 @@ func LoadConfig(root string, configPath string) (Config, error) {
 func ValidateConfig(root string, cfg Config) error {
 	var problems []string
 
-	if cfg.Version != 1 {
-		problems = append(problems, "version must be 1")
+	if cfg.Version != CurrentConfigVersion {
+		problems = append(problems, fmt.Sprintf("unsupported config version %d; this pp supports version %d (upgrade pp for newer configs)", cfg.Version, CurrentConfigVersion))
 	}
 	validateSlug(&problems, "project.name", cfg.Project.Name)
 	validateSlug(&problems, "project.environment", cfg.Project.Environment)

@@ -110,7 +110,7 @@ The normal path is config-driven:
 - each host runs `docker load` and `docker compose up -d`
 - deployment metadata is recorded for status and rollback
 
-`pp` owns application release state such as `.deploy/<project>/<environment>/releases/<release-id>/` locally and the uploaded release bundle on each target host. Use `pp deploy --config deploy.dev.yml` to select an environment's config. Existing deployments need the [environment isolation migration](deploy-cli.md#migrating-an-existing-deployment). It should not mutate base OS settings, install Forgejo, or manage platform services.
+`pp` owns application release state such as `.deploy/<project>/<environment>/releases/<release-id>/` locally and the uploaded release bundle on each target host. Use `pp deploy --config deploy.dev.yml` to select an environment's config. Existing state [upgrades automatically](deploy-cli.md#migrating-an-existing-deployment), preserving resource names and rollback history. It should not mutate base OS settings, install Forgejo, or manage platform services.
 
 Published ports default to `127.0.0.1`, including fixed port numbers. Host-level Caddy serves public HTTPS; direct public access requires an explicit `host_ip`. See [current CLI behavior](deploy-cli.md) before upgrading an existing deployment.
 

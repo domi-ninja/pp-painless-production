@@ -28,6 +28,11 @@ func LoadPlan(root string, configPath string) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
+	state, err := LoadState(root, cfg.Project)
+	if err != nil {
+		return Plan{}, err
+	}
+	cfg.Project.resourceID = state.ResourceID
 	git, err := ReadGitMetadata(root)
 	if err != nil {
 		return Plan{}, fmt.Errorf("read git metadata: %w", err)
@@ -98,6 +103,7 @@ func PrintPlan(w io.Writer, plan Plan) {
 	fmt.Fprintf(w, "project: %s\n", plan.Config.Project.Name)
 	fmt.Fprintf(w, "environment: %s\n", plan.Config.Project.Environment)
 	fmt.Fprintf(w, "deployment: %s\n", plan.Config.Project.DeploymentID())
+	fmt.Fprintf(w, "resources: %s\n", plan.Config.Project.ResourceID())
 	fmt.Fprintf(w, "release: %s\n", plan.ReleaseID)
 	fmt.Fprintf(w, "git_sha: %s\n", plan.Git.SHA)
 	fmt.Fprintf(w, "dirty: %t\n", plan.Git.Dirty)

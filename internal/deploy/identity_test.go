@@ -99,7 +99,7 @@ func TestReleaseRejectsWrongOwnerAndPaths(t *testing.T) {
 	}
 }
 
-func TestStateRejectsWrongOwnerAndLegacyState(t *testing.T) {
+func TestStateRejectsWrongOwner(t *testing.T) {
 	root := t.TempDir()
 	project := Project{Name: "shop", Environment: "dev"}
 	if err := SaveState(root, State{Project: "shop", Environment: "dev"}); err != nil {
@@ -109,10 +109,6 @@ func TestStateRejectsWrongOwnerAndLegacyState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadState(root, project); err == nil || !strings.Contains(err.Error(), "ownership mismatch") {
-		t.Fatalf("got %v", err)
-	}
-	writeFile(t, root, ".deploy/state.json", "{}")
-	if _, err := LoadState(root, project); err == nil || !strings.Contains(err.Error(), "explicit migration") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -125,8 +121,11 @@ func TestRemoteCommandsUseSelectedEnvironment(t *testing.T) {
 	writeExecutable(t, root, "ssh", "#!/bin/sh\nprintf '%s\\n' \"$2\" >> \"$PP_TEST_COMMAND_LOG\"\ncase \"$2\" in *ports.tsv*) echo 18001;; esac\n")
 	var out bytes.Buffer
 	d := NewDeployer(root, &out, &out)
-	for _, environment := range []string{"dev", "prod"} {
-		project := Project{Name: "shop", Environment: environment}
+	for _, project := range []Project{
+		{Name: "shop", Environment: "dev"},
+		{Name: "shop", Environment: "prod"},
+		{Name: "shop", Environment: "prod", resourceID: "shop"},
+	} {
 		plan := Plan{Config: Config{Project: project, Services: map[string]Service{"web": {Ports: []Port{{Published: AutoPort(), Target: 80}}}}}, Hosts: []HostPlan{{ID: "host", SSH: "unused", Services: []string{"web"}}}}
 		if err := d.ResolveAutoPorts(&plan); err != nil {
 			t.Fatal(err)
@@ -146,7 +145,7 @@ func TestRemoteCommandsUseSelectedEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"key='shop_dev:web:80'", "key='shop_prod:web:80'", "-p 'shop_dev'", "-p 'shop_prod'", "/routes/shop_dev.caddy", "/routes/shop_prod.caddy", "label=pp.environment=dev", "label=pp.environment=prod"} {
+	for _, want := range []string{"key='shop_dev:web:80'", "key='shop_prod:web:80'", "key='shop:web:80'", "-p 'shop_dev'", "-p 'shop_prod'", "-p 'shop'", "/routes/shop_dev.caddy", "/routes/shop_prod.caddy", "/routes/shop.caddy", "label=pp.environment=dev", "label=pp.environment=prod"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("missing %q in commands", want)
 		}
@@ -234,9 +233,9 @@ func TestRollbackRejectsOtherEnvironmentBeforeRunningCommands(t *testing.T) {
 	if _, err := os.Stat(log); !os.IsNotExist(err) {
 		t.Fatalf("rollback ran an external command: %v", err)
 	}
-	// A legacy state file must also stop deployment before builds or host changes.
-	writeFile(t, root, ".deploy/state.json", "{}")
-	if err := d.Deploy(); err == nil || !strings.Contains(err.Error(), "explicit migration") {
+	// An unsupported state format must stop before builds or host changes.
+	writeFile(t, root, filepath.Join(".deploy", project.Name, project.Environment, "state.json"), `{"version":99,"project":"quotes","environment":"dev"}`)
+	if err := d.Deploy(); err == nil || !strings.Contains(err.Error(), "unsupported state version") {
 		t.Fatalf("got %v", err)
 	}
 	if _, err := os.Stat(log); !os.IsNotExist(err) {
