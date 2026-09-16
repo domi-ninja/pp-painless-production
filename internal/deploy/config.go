@@ -79,8 +79,9 @@ type RouteFile struct {
 }
 
 type EnvSpec struct {
-	Source   string   `yaml:"source"`
-	Required []string `yaml:"required"`
+	Source     string   `yaml:"source"`
+	Required   []string `yaml:"required"`
+	IncludeAll bool     `yaml:"include_all,omitempty"`
 }
 
 type Port struct {
@@ -287,6 +288,9 @@ func ValidateConfig(root string, cfg Config) error {
 			}
 		}
 		validateEnv(&problems, root, "services."+serviceID+".env", service.Env)
+		if service.Env.Source != "" && len(service.Env.Required) == 0 && !service.Env.IncludeAll {
+			problems = append(problems, "services."+serviceID+".env.required must list injected keys, or set include_all: true explicitly")
+		}
 		validateHealth(&problems, "services."+serviceID+".health", service.Health, len(service.Ports) > 0)
 		for _, mount := range service.Volumes {
 			if mount.Target == "" {

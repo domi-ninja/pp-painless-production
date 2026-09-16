@@ -357,8 +357,23 @@ func renderServiceEnv(root string, envDir string, serviceID string, env EnvSpec)
 	if err != nil {
 		return "", fmt.Errorf("load env for %s: %w", serviceID, err)
 	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
+	selected := map[string]bool{}
+	for _, key := range env.Required {
+		if _, ok := values[key]; !ok {
+			return "", fmt.Errorf("env for %s is missing required key %s", serviceID, key)
+		}
+		selected[key] = true
+	}
+	if env.IncludeAll {
+		for key := range values {
+			selected[key] = true
+		}
+	}
+	if len(selected) == 0 {
+		return "", fmt.Errorf("env for %s must list required keys or explicitly set include_all: true", serviceID)
+	}
+	keys := make([]string, 0, len(selected))
+	for key := range selected {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)

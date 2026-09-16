@@ -39,7 +39,9 @@ References:
 
 Recommendation: create remote env directories as `0700`, upload to a temporary path, then install env files with `0600`. Consider removing stale env files from previous releases if secrets rotate.
 
-### High/Medium: services receive all keys from an env source
+### Fixed: services receive only declared env keys
+
+Service env files now use `env.required` as an allowlist. Whole-file injection requires `include_all: true`. Tests verify that database and storage services do not receive each other's secrets. The original finding follows.
 
 `env.required` is validation-only. When a service has an env source, every key from that source file is rendered into that service's env file, including secrets the service did not declare.
 

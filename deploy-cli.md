@@ -27,6 +27,8 @@ Both fixed and automatic ports bind to `127.0.0.1` unless `host_ip` is explicit.
 
 ## Environment isolation
 
+Service `env.required` lists the keys injected from `env.source`, as well as validating their presence. Declare every key the service needs. A source without a key list is rejected unless you explicitly set `env.include_all: true`. This restriction applies to service env files, not build or operator-run hook inputs.
+
 Each deployment belongs to a project and environment. Commands accept `--config` after the command name; paths inside the config remain relative to the working directory.
 
 ```sh
