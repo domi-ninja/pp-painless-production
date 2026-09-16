@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -158,6 +159,9 @@ func LoadRelease(root string, project Project, releaseID string) (ReleaseRecord,
 	if record.ResourceID != project.ResourceID() {
 		return ReleaseRecord{}, fmt.Errorf("release %s has a mismatched resource identity", releaseID)
 	}
+	if err := relocateRecordPaths(root, project, releaseID, &record); err != nil {
+		return ReleaseRecord{}, err
+	}
 	if err := validateRecordPaths(root, project, releaseID, record); err != nil {
 		return ReleaseRecord{}, err
 	}
@@ -171,6 +175,51 @@ func LoadRelease(root string, project Project, releaseID string) (ReleaseRecord,
 		}
 	}
 	return record, nil
+}
+
+// Resolve a moved checkout using the deployment identity and release directory suffix.
+// Paths are rebased together; artifacts outside the recorded bundle are never adopted.
+// This leaves on-disk metadata untouched until an operation saves the release again.
+func relocateRecordPaths(root string, project Project, releaseID string, record *ReleaseRecord) error {
+	if record.ReleaseID != releaseID {
+		return fmt.Errorf("release %s has a mismatched ID", releaseID)
+	}
+	oldBundle := filepath.Clean(record.BundlePath)
+	suffixes := []string{filepath.Join(".deploy", project.Name, project.Environment, "releases", releaseID)}
+	if project.ResourceID() == project.Name {
+		suffixes = append(suffixes, filepath.Join(".deploy", "releases", releaseID))
+	}
+	var bundle string
+	for _, suffix := range suffixes {
+		if oldBundle == filepath.Join(root, suffix) || (filepath.IsAbs(oldBundle) && strings.HasSuffix(oldBundle, string(filepath.Separator)+suffix)) {
+			bundle = filepath.Join(root, suffix)
+			break
+		}
+	}
+	if bundle == "" {
+		return fmt.Errorf("release %s has a mismatched bundle path", releaseID)
+	}
+	rebase := func(path string) (string, error) {
+		if path == "" {
+			return "", nil
+		}
+		relative, err := filepath.Rel(oldBundle, path)
+		if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("release %s has an artifact outside its bundle: %s", releaseID, path)
+		}
+		return filepath.Join(bundle, relative), nil
+	}
+	var err error
+	if record.ImageTar, err = rebase(record.ImageTar); err != nil {
+		return err
+	}
+	for i := range record.Images {
+		if record.Images[i].Tar, err = rebase(record.Images[i].Tar); err != nil {
+			return err
+		}
+	}
+	record.BundlePath = bundle
+	return nil
 }
 
 func validateRecordPaths(root string, project Project, releaseID string, record ReleaseRecord) error {

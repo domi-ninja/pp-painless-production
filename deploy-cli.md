@@ -69,3 +69,13 @@ Before deployment, the CLI checks container ownership on every host. It then rec
 Missing release records, conflicting ownership, or both old and new container layouts require investigation. The CLI will not guess, delete volumes or start a replacement database. A deployment already migrated to scoped resources, such as Humanist production, keeps its current identity.
 
 For future format changes, add an explicit version migration and tests. Reading an old format must not silently rename infrastructure or discard rollback history. Config and state versions advance independently.
+
+### Moving a checkout
+
+You can rename or move an app directory together with its `.deploy` directory.
+PP resolves recorded bundle and image paths under the current checkout when loading
+releases, including older deployment layouts. Project, environment, release ID and
+remote resource identities must still match; image artifacts must stay inside their
+recorded bundle. Current and previous releases remain available for rollback.
+No repair command or manual metadata edit is needed. Loading current-version metadata
+does not rewrite it; the next save records the current location.

@@ -151,6 +151,9 @@ func migrateState(root string, selected Project) error {
 			return err
 		}
 		id := filepath.Base(filepath.Dir(path))
+		if err := relocateRecordPaths(root, owner, id, &record); err != nil {
+			return err
+		}
 		if err := validateRecordPaths(root, owner, id, record); err != nil {
 			return err
 		}
