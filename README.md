@@ -1,4 +1,6 @@
-# Codeberg CI/CD and `pp` Deployment Research
+# Painless Production
+
+`pp` is Painless Production, a Go CLI for deploying applications to Docker hosts over SSH.
 
 This repository contains two related but separate tracks:
 
@@ -142,3 +144,10 @@ Coolify was used previously as a platform layer. New work should not depend on i
 
 - Ansible for base host and platform services such as Forgejo.
 - `pp` for side-project application deployments.
+
+## What does `pp` stand for?
+
+- **Painless Production.** The official name and the promise we're trying to keep.
+- **Push & Pray.** Historically accurate.
+- **Predictable Production.** The engineering goal.
+- **Pocket Platform.** Small deployment tool, no platform circus.
