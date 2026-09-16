@@ -44,25 +44,4 @@ reverse_proxy_enabled: false
 reverse_proxy_email: "admin@example.com"
 reverse_proxy_stop_coolify_proxy: false
 
-# Optional Forgejo server. Keep host-specific domains and secrets in ignored
-# host vars files.
-forgejo_enabled: false
-forgejo_domain: ""
-forgejo_root_url: ""
-forgejo_ssh_port: "2222"
-forgejo_proxy_route_enabled: "{{ reverse_proxy_enabled | default(false) }}"
-forgejo_proxy_routes_dir: "{{ reverse_proxy_routes_dir | default('/etc/pp/proxy/routes') }}"
-forgejo_proxy_target: "http://127.0.0.1:{{ forgejo_http_port | default('3000') }}"
-
-# Optional Codeberg/Forgejo Actions runner.
-forgejo_runner_enabled: false
-forgejo_runner_registered: false
-forgejo_runner_name: codeberg-prod-1
-forgejo_runner_labels:
-  - "docker:docker://node:22-bookworm"
-  - "ubuntu-24.04:docker://ubuntu:24.04"
-
-# Optional Codeberg-hosted Woodpecker agent.
-woodpecker_agent_enabled: false
-woodpecker_agent_secret: ""
-woodpecker_agent_labels: {}
+# Git hosting and CI runners are managed in the separate git-host-ansible repo.

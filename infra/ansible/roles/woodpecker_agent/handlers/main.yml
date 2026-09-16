@@ -1,5 +1,0 @@
----
-- name: restart woodpecker agent
-  ansible.builtin.command: "docker compose -f {{ woodpecker_agent_app_dir }}/compose.yml up -d"
-  changed_when: true
-

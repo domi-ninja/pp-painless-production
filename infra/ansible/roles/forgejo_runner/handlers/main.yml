@@ -1,5 +1,0 @@
----
-- name: restart forgejo runner
-  ansible.builtin.command: "docker compose -f {{ forgejo_runner_app_dir }}/compose.yml up -d"
-  changed_when: true
-

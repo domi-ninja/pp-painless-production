@@ -3,12 +3,13 @@
   hosts: prod_servers
   become: true
   pre_tasks:
-    - name: Refuse CI runners on production hosts
+    - name: Refuse Git hosting and CI roles in the application playbook
       ansible.builtin.assert:
         that:
+          - not (forgejo_enabled | default(false) | bool)
           - not (forgejo_runner_enabled | default(false) | bool)
           - not (woodpecker_agent_enabled | default(false) | bool)
-        fail_msg: "CI runners require a dedicated VM. Use runner-server.yml with the runner_servers inventory group."
+        fail_msg: "Git hosting and CI moved to git-host-ansible. Use its playbooks; CI still requires a dedicated VM."
 
     - name: Load ignored host credentials when present
       ansible.builtin.include_vars:
@@ -28,9 +29,3 @@
       when: coolify_enabled | bool
     - role: reverse_proxy
       when: reverse_proxy_enabled | bool
-    - role: forgejo
-      when: forgejo_enabled | bool
-    - role: forgejo_runner
-      when: forgejo_runner_enabled | bool
-    - role: woodpecker_agent
-      when: woodpecker_agent_enabled | bool

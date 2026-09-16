@@ -31,7 +31,7 @@ Project and environment identify each deployment. Use `pp deploy --config deploy
 
 Ansible is a setup subtask, not part of every deployment. Use the bundled [provisioning playbook](infra/ansible/README.md) when adding a host or deliberately changing its system configuration. It prepares Ubuntu, SSH access, Docker, firewall rules and optional Caddy or storage mounts. Skip provisioning when your host already meets the requirements.
 
-After setup, return to your app repository and use `pp`. You do not need to rerun Ansible to ship an application change. Optional Forgejo and CI runner roles are server administration extras, not prerequisites for `pp`.
+After setup, return to your app repository and use `pp`. You do not need to rerun Ansible to ship an application change. Forgejo hosting and CI runner provisioning live separately in [git-host-ansible](https://git.domi.ninja/domi-ninja/git-host-ansible).
 
 ## Source layout
 

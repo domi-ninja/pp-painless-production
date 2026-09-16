@@ -47,7 +47,7 @@ ansible-playbook -i inventory/prod.local.yml --limit prod-1 \
   playbooks/prod-server.yml
 ```
 
-This explicitly loads the baseline settings and your local overrides; the `.local.yml` filename is not automatically associated with a host. Replace `prod-1` with your inventory hostname in both the filename and `--limit`. Leave Forgejo and storage relocation disabled unless needed; CI runners require separate hosts. For later provisioning runs, update the inventory to use the configured admin user instead of root.
+This explicitly loads the baseline settings and your local overrides; the `.local.yml` filename is not automatically associated with a host. Replace `prod-1` with your inventory hostname in both the filename and `--limit`. Leave storage relocation disabled unless needed. Git hosting and CI provisioning live in [git-host-ansible](https://git.domi.ninja/domi-ninja/git-host-ansible); CI runners require separate hosts. For later provisioning runs, update the inventory to use the configured admin user instead of root.
 
 Verify a fresh SSH connection and Docker access:
 

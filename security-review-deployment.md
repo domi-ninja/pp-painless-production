@@ -8,6 +8,8 @@ Updated 2026-09-16. The findings below are addressed in code and covered by test
 
 ### Fixed placement policy: CI runners require isolated VMs
 
+Runner roles, the dedicated-runner playbook and their tests now live in [git-host-ansible](https://git.domi.ninja/domi-ninja/git-host-ansible). The pp application playbook refuses Git/CI role flags, and the CLI still refuses hosts marked for CI. The following records the policy implemented before extraction.
+
 The production playbook refuses runners. Runner roles require an explicit dedicated-host declaration, runner-only inventory membership, and no existing pp containers. Forgejo DinD uses a shared Unix socket instead of unauthenticated TCP. Privileged DinD and Woodpecker's host Docker access still grant control of the dedicated VM; never accept untrusted jobs there. Existing hosts require operator migration, not an automatic live move. Original finding follows.
 
 The Forgejo runner starts privileged Docker-in-Docker with unauthenticated TCP Docker on port 2375, and the Woodpecker agent mounts `/var/run/docker.sock`. Any workflow that reaches these agents can control Docker and likely root-equivalent host resources.

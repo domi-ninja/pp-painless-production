@@ -1,9 +1,0 @@
----
-woodpecker_agent_enabled: false
-woodpecker_agent_app_dir: /opt/woodpecker-agent
-woodpecker_agent_image: woodpeckerci/woodpecker-agent:v3
-woodpecker_agent_server: grpc.ci.codeberg.org:443
-woodpecker_agent_secure: true
-woodpecker_agent_secret: ""
-woodpecker_agent_labels: {}
-

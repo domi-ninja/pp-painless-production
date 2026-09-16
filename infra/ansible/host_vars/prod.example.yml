@@ -30,13 +30,10 @@ data_volume_enabled: false
 docker_data_root_enabled: false
 # docker_data_root_path: /data/docker
 
-# Optional platform services are not needed for application deployment.
-forgejo_enabled: false
+# Legacy Coolify support is off for new pp application hosts.
 coolify_enabled: false
 
-# CI runners belong on separate VMs, never this production app host.
-forgejo_runner_enabled: false
-woodpecker_agent_enabled: false
+# Git hosting and CI are configured in the separate git-host-ansible repo.
 
 # Keep secrets in host_vars/prod-1.credentials.local.yml or Ansible Vault.
 # pp also needs proxy-directory write access and permission to reload Caddy;
