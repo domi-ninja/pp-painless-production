@@ -1,4 +1,8 @@
 ---
+- name: Check runner isolation
+  ansible.builtin.include_role:
+    name: runner_guard
+
 - name: Require Woodpecker agent secret
   ansible.builtin.assert:
     that:
@@ -34,4 +38,3 @@
 - name: Start Woodpecker agent stack
   ansible.builtin.command: "docker compose -f {{ woodpecker_agent_app_dir }}/compose.yml up -d"
   changed_when: true
-

@@ -1,4 +1,8 @@
 ---
+- name: Check runner isolation
+  ansible.builtin.include_role:
+    name: runner_guard
+
 - name: Create Forgejo runner directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -22,4 +26,3 @@
 - name: Start Forgejo runner stack
   ansible.builtin.command: "docker compose -f {{ forgejo_runner_app_dir }}/compose.yml up -d"
   changed_when: true
-

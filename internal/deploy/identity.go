@@ -81,6 +81,7 @@ resource=` + shellQuote(project.ResourceID()) + `
 claim=` + fmt.Sprint(claim) + `
 owner_file=".pp/$project/resource-owner"
 fail() { echo "$1" >&2; exit 45; }
+[ ! -e /etc/pp/ci-runner-host ] || fail "This host is reserved for CI runners; choose an application host."
 if [ "$claim" = true ]; then
   mkdir -p ".pp/$project"
   exec 8>".pp/$project/resource-owner.lock"

@@ -1,0 +1,32 @@
+---
+- name: Require isolated CI runner placement
+  ansible.builtin.assert:
+    that:
+      - ci_runner_isolated_host | default(false) | bool
+      - "'runner_servers' in group_names"
+      - "'prod_servers' not in group_names"
+    fail_msg: "CI runners can control their VM. Use a dedicated runner_servers host with ci_runner_isolated_host: true."
+
+- name: Check for pp application containers
+  ansible.builtin.command: docker ps -aq --filter label=pp.project
+  register: runner_pp_containers
+  changed_when: false
+  check_mode: false
+
+- name: Refuse to share a runner VM with pp applications
+  ansible.builtin.assert:
+    that:
+      - runner_pp_containers.stdout | trim | length == 0
+    fail_msg: "This host contains pp application containers. Move CI to a dedicated VM."
+
+- name: Create pp host policy directory
+  ansible.builtin.file:
+    path: /etc/pp
+    state: directory
+    mode: "0755"
+
+- name: Reserve this VM for CI runners
+  ansible.builtin.copy:
+    dest: /etc/pp/ci-runner-host
+    content: "Dedicated CI runner VM. Do not deploy applications here.\n"
+    mode: "0644"

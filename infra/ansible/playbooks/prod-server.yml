@@ -3,6 +3,13 @@
   hosts: prod_servers
   become: true
   pre_tasks:
+    - name: Refuse CI runners on production hosts
+      ansible.builtin.assert:
+        that:
+          - not (forgejo_runner_enabled | default(false) | bool)
+          - not (woodpecker_agent_enabled | default(false) | bool)
+        fail_msg: "CI runners require a dedicated VM. Use runner-server.yml with the runner_servers inventory group."
+
     - name: Load ignored host credentials when present
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../host_vars/{{ inventory_hostname }}.credentials.local.yml"

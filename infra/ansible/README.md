@@ -9,8 +9,8 @@ This Ansible stack provisions an Ubuntu 22.04+ host with a practical production 
 - Optional persistent data volume mounted at `/data`.
 - Optional Forgejo install using Docker Compose under `/data/forgejo`.
 - Optional Caddy reverse proxy for Forgejo and `pp`-managed application routes.
-- Optional compose-managed Forgejo Actions runner for Codeberg.
-- Optional compose-managed Woodpecker agent for Codeberg-hosted Woodpecker.
+
+CI runners use the separate `runner-server.yml` playbook on dedicated VMs. They are refused on production application hosts.
 
 ## Layout
 
@@ -140,6 +140,10 @@ For legacy hosts still using a Coolify/Traefik proxy network, explicitly set `fo
 
 ## Forgejo Actions runner
 
+Runners are refused by `prod-server.yml`. Use a separate VM in inventory group `runner_servers`, set `ci_runner_isolated_host: true`, and run `playbooks/runner-server.yml`. Provide that VM's SSH key, `docker_users` and other baseline variables as local overrides. Do not put it in `prod_servers` or host application containers there. Treat workflows as root-equivalent access to the runner VM. Restrict runner registration and accepted jobs to trusted repositories and refs.
+
+Forgejo's Docker-in-Docker socket is shared only with its runner over a Unix socket. It no longer listens on unauthenticated TCP port 2375. Privileged DinD still requires VM isolation.
+
 Enable the optional runner:
 
 ```yaml
@@ -148,7 +152,7 @@ forgejo_runner_registered: false
 forgejo_runner_name: codeberg-prod-1
 ```
 
-Run the playbook. It will start the runner container in a waiting state so you can register it without storing a token in git:
+Run `runner-server.yml` against the dedicated VM. It starts the runner container in a waiting state so you can register it without storing a token in Git:
 
 ```sh
 ssh deploy@SERVER_IP
@@ -166,6 +170,8 @@ Then set `forgejo_runner_registered: true` and rerun the playbook to start the r
 
 ## Woodpecker agent
 
+The same dedicated-VM policy applies. The host Docker socket grants control of that runner VM; it must not be a production application host.
+
 Enable the optional Codeberg-hosted Woodpecker agent:
 
 ```yaml
@@ -176,6 +182,8 @@ woodpecker_agent_labels:
 ```
 
 The Woodpecker agent uses `/var/run/docker.sock`. Only use this on hosts where the pipelines are trusted.
+
+Runner installation writes `/etc/pp/ci-runner-host`; `pp` refuses application deployments to marked hosts. Removing runners does not remove that safety marker automatically. Existing shared hosts must be split manually before adopting this policy.
 
 ## Notes
 

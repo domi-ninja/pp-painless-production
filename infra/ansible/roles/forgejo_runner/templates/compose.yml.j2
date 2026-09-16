@@ -5,8 +5,11 @@ services:
     command:
       - dockerd
       - -H
-      - tcp://0.0.0.0:2375
-      - --tls=false
+      - unix:///run/runner-docker/docker.sock
+      - --group
+      - "1001"
+    volumes:
+      - runner-docker-socket:/run/runner-docker
     restart: unless-stopped
 
   runner:
@@ -14,11 +17,14 @@ services:
     depends_on:
       - docker-in-docker
     environment:
-      DOCKER_HOST: tcp://docker-in-docker:2375
+      DOCKER_HOST: unix:///run/runner-docker/docker.sock
     user: "1001:1001"
     volumes:
       - {{ forgejo_runner_data_dir }}:/data
+      - runner-docker-socket:/run/runner-docker
     restart: unless-stopped
     command: >-
       /bin/sh -c "{% if forgejo_runner_registered | bool %}sleep 5; forgejo-runner daemon --config /data/.runner{% else %}sleep infinity{% endif %}"
 
+volumes:
+  runner-docker-socket:

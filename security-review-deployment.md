@@ -2,9 +2,13 @@
 
 Scope: obvious security gaps in the new deployment system, including the Go deploy CLI and Ansible deployment/CI roles.
 
+Updated 2026-09-16. The findings below are addressed in code and covered by tests. Original descriptions are retained for context. Runner isolation still depends on deploying to a dedicated VM; existing infrastructure is not automatically migrated. See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for the remaining operational caveats.
+
 ## Findings
 
-### High: CI runners can become host compromise paths
+### Fixed placement policy: CI runners require isolated VMs
+
+The production playbook refuses runners. Runner roles require an explicit dedicated-host declaration, runner-only inventory membership, and no existing pp containers. Forgejo DinD uses a shared Unix socket instead of unauthenticated TCP. Privileged DinD and Woodpecker's host Docker access still grant control of the dedicated VM; never accept untrusted jobs there. Existing hosts require operator migration, not an automatic live move. Original finding follows.
 
 The Forgejo runner starts privileged Docker-in-Docker with unauthenticated TCP Docker on port 2375, and the Woodpecker agent mounts `/var/run/docker.sock`. Any workflow that reaches these agents can control Docker and likely root-equivalent host resources.
 

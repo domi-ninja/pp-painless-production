@@ -1,6 +1,6 @@
 # Security review
 
-Source review from 2026-09-07, commit `7dff342` plus working-tree changes. Updated 2026-09-14. Assumes trusted deployment configuration.
+Source review from 2026-09-07, commit `7dff342` plus working-tree changes. Updated 2026-09-16. Assumes trusted deployment configuration.
 
 Findings 1 through 6 are fixed in the CLI. Separate infrastructure findings are tracked in [the deployment review](security-review-deployment.md).
 
@@ -16,4 +16,4 @@ Findings 1 through 6 are fixed in the CLI. Separate infrastructure findings are 
 
 6. **Fixed: Compose credential interpolation.** Rendered Compose string values escape literal dollars; service env files use `format: raw`. A real Compose parsing test verifies dollars, quotes, backslashes and whitespace survive unchanged, including inline environment and health-check arguments. New bundles require Compose 2.30+ with raw env support. Historical rollback bundles retain their original contents.
 
-Validation: Go tests and vet passed. Humanist's migration, seven live smoke checks and a Convex WebSocket subscription passed on 2026-09-14. Findings 5 and 6 were reproduced locally. Dependency and image vulnerability scans remain outstanding.
+Validation: Go tests, race checks, vet and local Ansible guard tests passed. Finding 5 has an exploit/control execution test; finding 6 is verified against a disposable Compose-created container. No production systems were redeployed for these fixes. Historical bundles and existing infrastructure need rollout separately. Dependency and image vulnerability scans remain outstanding.
