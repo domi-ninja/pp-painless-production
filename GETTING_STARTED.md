@@ -89,6 +89,6 @@ pp status
 
 `plan` does not deploy, though it can upgrade local state. Review the selected host and environment before running `pp`, which performs the deployment. Config paths are relative to the application's working directory.
 
-Preserve `.deploy/`: it contains local state and rollback artifacts. See the [version migration guide](deploy-cli.md#migrating-an-existing-deployment) and [security review](SECURITY_REVIEW.md) before trusting this experimental tool with production secrets.
+Preserve `.deploy/`: it contains local state and rollback artifacts. See the [version migration guide](deploy-cli.md#migrating-an-existing-deployment) and [deployment security review](security-review-deployment.md) before trusting this experimental tool with production secrets.
 
 From here, ordinary app releases only need `pp`. Return to Ansible when the server itself needs a configuration change.

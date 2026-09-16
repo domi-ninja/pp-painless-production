@@ -2,7 +2,7 @@
 
 Scope: obvious security gaps in the new deployment system, including the Go deploy CLI and Ansible deployment/CI roles.
 
-Updated 2026-09-16. The findings below are addressed in code and covered by tests. Original descriptions are retained for context. Runner isolation still depends on deploying to a dedicated VM; existing infrastructure is not automatically migrated. See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for the remaining operational caveats.
+Updated 2026-09-16. The findings below are addressed in code and covered by tests. Original descriptions are retained for context. Runner isolation still depends on deploying to a dedicated VM; existing infrastructure and historical rollback bundles are not automatically migrated. Dependency and image vulnerability scans remain outstanding.
 
 ## Findings
 

@@ -25,7 +25,7 @@ Project and environment identify each deployment. Use `pp deploy --config deploy
 
 - [CLI behavior and migrations](deploy-cli.md)
 - [Example applications](examples/)
-- [Known security limitations](SECURITY_REVIEW.md)
+- [Deployment security review](security-review-deployment.md)
 
 ## Server provisioning, occasionally
 
