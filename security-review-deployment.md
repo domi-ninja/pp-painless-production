@@ -26,7 +26,9 @@ References:
 
 Recommendation: model SSH as structured fields such as `user`, `host`, and `port`, or strictly reject values beginning with `-` and invoke `ssh`/`scp` with `--` before the target where supported.
 
-### High: remote secret env files are not permissioned after upload
+### Fixed: remote secret env files are permissioned after upload
+
+Release directories are now `0700` before transfer; Compose and env files are `0600` afterward. Tests cover new and reused paths. The original finding follows.
 
 Local rendered env files are written as `0600`, but remote upload uses plain `scp` into directories created by `mkdir -p` with default remote permissions. There is no remote `chmod` or `install -m 0600`.
 

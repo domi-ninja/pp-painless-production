@@ -518,7 +518,8 @@ func optionalTimeoutContext(seconds int) (context.Context, context.CancelFunc) {
 }
 
 func (d Deployer) UploadHostBundle(host HostBundle, images []ImageBundle) error {
-	if err := d.Remote(host.SSH, "mkdir -p "+shellQuote(host.RemoteDir)+"/env "+shellQuote(host.RemoteDir)+"/images"); err != nil {
+	dirs := shellJoin([]string{host.RemoteDir, host.RemoteDir + "/env", host.RemoteDir + "/images"})
+	if err := d.Remote(host.SSH, "umask 077; mkdir -p "+dirs+" && chmod 0700 "+dirs); err != nil {
 		return err
 	}
 	if err := d.Copy(host.Compose, host.SSH, host.RemoteDir+"/compose.yml"); err != nil {
@@ -539,7 +540,11 @@ func (d Deployer) UploadHostBundle(host HostBundle, images []ImageBundle) error 
 			return err
 		}
 	}
-	return nil
+	files := []string{host.RemoteDir + "/compose.yml"}
+	for _, envFile := range host.EnvFiles {
+		files = append(files, host.RemoteDir+"/env/"+filepath.Base(envFile))
+	}
+	return d.Remote(host.SSH, "chmod 0600 "+shellJoin(files))
 }
 
 func (d Deployer) ApplyRoutes(plan Plan, bundle Bundle) error {

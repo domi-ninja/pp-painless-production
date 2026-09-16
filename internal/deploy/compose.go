@@ -79,6 +79,9 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 	if err := os.MkdirAll(imagesDir, 0755); err != nil {
 		return Bundle{}, fmt.Errorf("create image dir: %w", err)
 	}
+	if err := os.Chmod(bundleRoot, 0700); err != nil {
+		return Bundle{}, fmt.Errorf("protect release directory: %w", err)
+	}
 
 	bundle := Bundle{
 		Root: bundleRoot,
@@ -457,7 +460,7 @@ func writeYAML(path string, value any) error {
 	if err != nil {
 		return fmt.Errorf("encode %s: %w", path, err)
 	}
-	if err := os.WriteFile(path, body, 0644); err != nil {
+	if err := atomicWrite(path, body); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
