@@ -68,7 +68,15 @@ cd /path/to/your-app
 pp init
 ```
 
-Skip `init` if the app already has `deploy.yml`. Edit the starter's SSH target, domain and container port, and replace its `true` health check with a real check. It assumes a Dockerfile and port 3000. See the [simple website example](../examples/simple-website/) or [other examples](../examples/).
+Skip `init` if the app already has `deploy.yml`. Edit the starter's SSH target, domain and container port, and replace its `true` health check with a real check. It assumes a Dockerfile and port 3000.
+
+For a fuller starting point, choose a sample instead of the generated starter:
+
+- [Simple website](../examples/simple-website/README.md): a pnpm frontend built into an nginx container, with a health check and HTTPS route.
+- [Stateful Go website](../examples/stateful-go-website/README.md): a Go app with SQLite migrations, a persistent volume and a required secret.
+- [Convex website](../examples/convex-website/README.md): a frontend, Convex backend and dashboard, Postgres and MinIO, with setup and deployment hooks.
+
+These are deployment templates, not complete runnable apps. Read the sample's README for its expected application layout. Copy the needed files into your app, merging ignore rules and adapting any existing Dockerfile or scripts. Replace the sample project name, SSH target and domains, match the build output and container port to your app, and create any required env file with your own secrets.
 
 Commit `deploy.yml`. Keep secrets out of Git and the Docker build context. `pp init` adds `.deploy/` to `.gitignore` and `.deploy` to `.dockerignore`; add your secret files separately.
 
