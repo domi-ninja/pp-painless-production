@@ -30,15 +30,21 @@ Install Ansible on your workstation, then create a local inventory from the exam
 ```sh
 cd infra/ansible
 cp inventory/prod.example.yml inventory/prod.local.yml
+cp host_vars/prod.example.yml host_vars/prod-1.local.yml
 ```
 
-Edit `inventory/prod.local.yml` with the server IP and bootstrap SSH user. Then set at least `admin_ssh_public_keys` in `group_vars/prod_servers.yml` or in an ignored local vars file.
+Edit `inventory/prod.local.yml` with the server IP and bootstrap SSH user. Set your public key and email in `host_vars/prod-1.local.yml`, copied from the [host-vars example](host_vars/prod.example.yml). Keep the example unchanged and real values in the ignored copy.
 
 Run the playbook:
 
 ```sh
-ansible-playbook -i inventory/prod.local.yml playbooks/prod-server.yml
+ansible-playbook -i inventory/prod.local.yml --limit prod-1 \
+  -e @group_vars/prod_servers.yml \
+  -e @host_vars/prod-1.local.yml \
+  playbooks/prod-server.yml
 ```
+
+The `.local.yml` file is loaded explicitly, not discovered by hostname. Replace `prod-1` with your inventory hostname and keep `--limit` so the overrides cannot affect other hosts. See [Getting started](../../GETTING_STARTED.md#2-prepare-a-host-usually-once) for SSH lockout precautions and the additional permissions `pp` needs.
 
 After the first run, connect as the configured admin user:
 

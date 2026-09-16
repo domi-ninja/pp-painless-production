@@ -1,0 +1,43 @@
+---
+# Copy to host_vars/prod-1.local.yml, edit, and pass it with -e @host_vars/prod-1.local.yml.
+# Use --limit prod-1 so these overrides apply only to the matching inventory host.
+# This example and *.local.yml are not loaded automatically as per-host vars.
+
+admin_user: deploy
+admin_ssh_public_keys:
+  - "ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY your-comment"
+
+ssh_port: 22
+ssh_password_authentication: false
+ssh_permit_root_login: "no"
+
+docker_enabled: true
+docker_users:
+  - "{{ admin_user }}"
+
+# Host-level Caddy serves HTTPS for pp's loopback-bound application ports.
+reverse_proxy_enabled: true
+reverse_proxy_email: "you@example.com"
+ufw_allowed_tcp_ports:
+  - "{{ ssh_port }}"
+  - 80
+  - 443
+
+# Leave storage changes off until the device and existing data are verified.
+data_volume_enabled: false
+# data_volume_src: /dev/disk/by-id/REPLACE_WITH_VERIFIED_DEVICE
+# data_volume_path: /data
+docker_data_root_enabled: false
+# docker_data_root_path: /data/docker
+
+# Optional platform services are not needed for application deployment.
+forgejo_enabled: false
+coolify_enabled: false
+
+# CI runners belong on separate VMs, never this production app host.
+forgejo_runner_enabled: false
+woodpecker_agent_enabled: false
+
+# Keep secrets in host_vars/prod-1.credentials.local.yml or Ansible Vault.
+# pp also needs proxy-directory write access and permission to reload Caddy;
+# see GETTING_STARTED.md before the first deployment.

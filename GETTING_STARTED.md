@@ -33,30 +33,21 @@ For a new Ubuntu 22.04+ host, work from the tool's clone:
 ```sh
 cd infra/ansible
 cp inventory/prod.example.yml inventory/prod.local.yml
+cp host_vars/prod.example.yml host_vars/prod-1.local.yml
 ```
 
-Edit the copied inventory with your server IP and bootstrap SSH user. Create `group_vars/bootstrap.local.yml` with your real public key and email:
-
-```yaml
-admin_user: deploy
-admin_ssh_public_keys:
-  - "ssh-ed25519 YOUR_PUBLIC_KEY"
-docker_users:
-  - deploy
-reverse_proxy_enabled: true
-reverse_proxy_email: you@example.com
-```
+Edit the copied inventory with your server IP and bootstrap SSH user. Edit the [host-vars example](infra/ansible/host_vars/prod.example.yml) copy with your real public key and email. It enables Docker and Caddy while leaving storage changes and platform services off.
 
 Both `.local.yml` files are ignored by Git. Keep credentials in ignored files or Ansible Vault. Review the [provisioning settings](infra/ansible/README.md), especially SSH, firewall and storage changes, before applying them. The defaults disable root and password SSH login; keep your bootstrap session open until you have verified a fresh login as `deploy`.
 
 ```sh
-ansible-playbook -i inventory/prod.local.yml \
+ansible-playbook -i inventory/prod.local.yml --limit prod-1 \
   -e @group_vars/prod_servers.yml \
-  -e @group_vars/bootstrap.local.yml \
+  -e @host_vars/prod-1.local.yml \
   playbooks/prod-server.yml
 ```
 
-This explicitly loads the baseline settings and your local overrides. Leave Forgejo, CI runners and storage relocation disabled unless needed. For later provisioning runs, update the inventory to use the configured admin user instead of root.
+This explicitly loads the baseline settings and your local overrides; the `.local.yml` filename is not automatically associated with a host. Replace `prod-1` with your inventory hostname in both the filename and `--limit`. Leave Forgejo and storage relocation disabled unless needed; CI runners require separate hosts. For later provisioning runs, update the inventory to use the configured admin user instead of root.
 
 Verify a fresh SSH connection and Docker access:
 
