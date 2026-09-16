@@ -15,6 +15,9 @@ type InitResult struct {
 }
 
 func InitConfig(root string, configPath string) (InitResult, error) {
+	if err := validateRepoPath(root, configPath); err != nil {
+		return InitResult{}, fmt.Errorf("config path: %w", err)
+	}
 	fullPath := filepath.Join(root, configPath)
 	if _, err := os.Stat(fullPath); err == nil {
 		return InitResult{}, fmt.Errorf("%s already exists", configPath)

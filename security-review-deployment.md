@@ -67,7 +67,9 @@ References:
 
 Recommendation: reject control characters, braces, whitespace, and newlines in route host/target fields. Validate route hosts as DNS names or explicit supported wildcard patterns.
 
-### Medium: config paths can escape the repository boundary
+### Fixed: config paths escape the repository boundary
+
+Config files, env sources, build contexts, Dockerfiles and route-file sources must stay inside the application repository. Validation rejects absolute paths, traversal and escaping or dangling symlinks. Tests include missing files below symlinked parents. Explicit hooks remain trusted commands, not sandboxed code. Original finding follows.
 
 `env.source` is joined and opened without rejecting `..` or absolute paths. Docker build context and Dockerfile are only checked for non-empty, not constrained to the repository.
 

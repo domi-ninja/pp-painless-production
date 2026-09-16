@@ -199,6 +199,9 @@ func validateSSHTarget(target string) error {
 var hookPhasePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$`)
 
 func LoadConfig(root string, configPath string) (Config, error) {
+	if err := validateRepoPath(root, configPath); err != nil {
+		return Config{}, fmt.Errorf("config path: %w", err)
+	}
 	fullPath := filepath.Join(root, configPath)
 	body, err := os.ReadFile(fullPath)
 	if err != nil {
@@ -232,11 +235,13 @@ func ValidateConfig(root string, cfg Config) error {
 	if len(cfg.Builds) == 0 {
 		require(&problems, "build.context", cfg.Build.Context)
 		require(&problems, "build.dockerfile", cfg.Build.Dockerfile)
+		validateBuildPaths(&problems, root, "build", cfg.Build)
 	} else {
 		for _, item := range sortedMap(cfg.Builds) {
 			buildID := item.Key
 			validateSlug(&problems, "builds."+buildID, buildID)
 			validateBuild(&problems, "builds."+buildID, item.Value)
+			validateBuildPaths(&problems, root, "builds."+buildID, item.Value)
 		}
 	}
 
@@ -359,6 +364,10 @@ func ValidateConfig(root string, cfg Config) error {
 		field := fmt.Sprintf("route_files[%d]", i)
 		require(&problems, field+".source", routeFile.Source)
 		if routeFile.Source != "" {
+			if err := validateRepoPath(root, routeFile.Source); err != nil {
+				problems = append(problems, field+".source: "+err.Error())
+				continue
+			}
 			if _, err := os.Stat(filepath.Join(root, routeFile.Source)); err != nil {
 				problems = append(problems, field+".source "+err.Error())
 			}
@@ -399,6 +408,14 @@ func validateBuild(problems *[]string, field string, build Build) {
 	for key := range build.Args {
 		if strings.TrimSpace(key) == "" {
 			*problems = append(*problems, field+".args has empty key")
+		}
+	}
+}
+
+func validateBuildPaths(problems *[]string, root, field string, build Build) {
+	for name, path := range map[string]string{"context": build.Context, "dockerfile": build.Dockerfile} {
+		if err := validateRepoPath(root, path); err != nil {
+			*problems = append(*problems, field+"."+name+": "+err.Error())
 		}
 	}
 }
@@ -452,6 +469,10 @@ func validateEnv(problems *[]string, root string, field string, env EnvSpec) {
 	}
 	if env.Source == "" {
 		*problems = append(*problems, field+".source is required when required env names are declared")
+		return
+	}
+	if err := validateRepoPath(root, env.Source); err != nil {
+		*problems = append(*problems, field+".source: "+err.Error())
 		return
 	}
 	values, err := LoadEnvFile(filepath.Join(root, env.Source))
