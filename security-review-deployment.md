@@ -53,7 +53,9 @@ References:
 
 Recommendation: render only declared keys, or introduce an explicit allowlist field. If whole-file behavior is desired, require a deliberate opt-in such as `include_all: true`.
 
-### Medium: Caddy route rendering allows config injection
+### Fixed: generated Caddy route injection
+
+Generated routes validate hostnames and HTTP(S) origins during config validation and rendering. Whitespace, Caddy syntax, credentials and URL suffixes are rejected. Full `route_files` templates remain explicitly trusted Caddy configuration. Original finding follows.
 
 `route.host` and `route.target` are written directly into Caddy config. `target` only gets URL parsing and `host` is not syntax-validated, so crafted committed config can inject arbitrary Caddy directives before reload.
 

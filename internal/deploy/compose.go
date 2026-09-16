@@ -233,6 +233,12 @@ func renderCaddyRoutes(root string, hostDir string, plan Plan, hostID string, en
 		if err != nil {
 			return "", err
 		}
+		if err := validateCaddyHost(route.Host); err != nil {
+			return "", fmt.Errorf("route host: %w", err)
+		}
+		if err := validateCaddyTarget(target); err != nil {
+			return "", fmt.Errorf("route target: %w", err)
+		}
 		body.WriteString(route.Host)
 		body.WriteString(" {\n")
 		body.WriteString("\treverse_proxy ")

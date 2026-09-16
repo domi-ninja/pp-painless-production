@@ -325,6 +325,9 @@ func ValidateConfig(root string, cfg Config) error {
 	}
 
 	for i, route := range cfg.Routes {
+		if err := validateCaddyHost(route.Host); err != nil {
+			problems = append(problems, fmt.Sprintf("routes[%d].host: %s", i, err))
+		}
 		field := fmt.Sprintf("routes[%d]", i)
 		require(&problems, field+".host", route.Host)
 		require(&problems, field+".service", route.Service)
@@ -332,7 +335,7 @@ func ValidateConfig(root string, cfg Config) error {
 			problems = append(problems, field+".service references unknown service "+route.Service)
 		}
 		if route.Target != "" {
-			if err := validateRouteTarget(route.Target); err != nil {
+			if err := validateCaddyTarget(route.Target); err != nil {
 				problems = append(problems, field+".target "+err.Error())
 			}
 		} else {
@@ -482,6 +485,30 @@ func validateRouteTarget(rawURL string) error {
 	}
 	if parsed.Host == "" {
 		return fmt.Errorf("must include host")
+	}
+	return nil
+}
+
+func validateCaddyHost(host string) error {
+	name := strings.TrimSuffix(strings.TrimPrefix(host, "*."), ".")
+	if name == "" || len(name) > 253 {
+		return fmt.Errorf("must be a DNS name or a leading wildcard DNS name")
+	}
+	for _, label := range strings.Split(name, ".") {
+		if len(label) > 63 || !slugPattern.MatchString(strings.ToLower(label)) {
+			return fmt.Errorf("must be a DNS name or a leading wildcard DNS name")
+		}
+	}
+	return nil
+}
+
+func validateCaddyTarget(target string) error {
+	if err := validateRouteTarget(target); err != nil {
+		return err
+	}
+	parsed, _ := url.Parse(target)
+	if parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || strings.ContainsAny(target, "{}\\\"'` \t\r\n") || strings.ContainsFunc(target, func(r rune) bool { return r < 32 || r == 127 }) {
+		return fmt.Errorf("must be an HTTP(S) origin without credentials, path, query, fragment or Caddy syntax")
 	}
 	return nil
 }
