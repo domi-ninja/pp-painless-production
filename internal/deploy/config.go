@@ -187,6 +187,15 @@ func (e ValidationError) Error() string {
 }
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+var sshTargetPattern = regexp.MustCompile(`^([a-zA-Z0-9_][a-zA-Z0-9_.-]*@)?[a-zA-Z0-9_][a-zA-Z0-9_.-]*$`)
+
+func validateSSHTarget(target string) error {
+	if !sshTargetPattern.MatchString(target) {
+		return fmt.Errorf("SSH target must be a hostname or user@hostname, without options, whitespace or shell syntax; use SSH config for ports and jump hosts")
+	}
+	return nil
+}
+
 var hookPhasePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$`)
 
 func LoadConfig(root string, configPath string) (Config, error) {
@@ -243,6 +252,9 @@ func ValidateConfig(root string, cfg Config) error {
 		host := item.Value
 		validateSlug(&problems, "hosts."+hostID, hostID)
 		require(&problems, "hosts."+hostID+".ssh", host.SSH)
+		if err := validateSSHTarget(host.SSH); err != nil {
+			problems = append(problems, "hosts."+hostID+".ssh: "+err.Error())
+		}
 	}
 
 	hostPorts := map[string]map[int]string{}

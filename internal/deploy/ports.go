@@ -30,6 +30,9 @@ func (d Deployer) ResolveAutoPorts(plan *Plan) error {
 }
 
 func (d Deployer) AllocateRemotePort(sshTarget string, key string) (int, error) {
+	if err := validateSSHTarget(sshTarget); err != nil {
+		return 0, err
+	}
 	out, err := d.Runner.Output(d.Root, "ssh", sshTarget, autoPortScript(key))
 	if err != nil {
 		return 0, err

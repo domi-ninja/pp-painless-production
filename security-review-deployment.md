@@ -15,7 +15,9 @@ References:
 
 Recommendation: run these only on isolated runner VMs, not shared production hosts. Restrict deployment workflows to trusted refs, keep runner scope narrow, and avoid host Docker socket access for untrusted jobs.
 
-### High: SSH target accepts option injection
+### Fixed: SSH target option injection
+
+Config validation and every deployment SSH entrypoint reject options, whitespace and shell syntax. Use `user@hostname` or an SSH config alias; configure ports and jump hosts in SSH config. Original finding follows.
 
 `hosts.*.ssh` is only checked for non-empty, then passed directly to `ssh` and `scp`. A malicious config value beginning with SSH options, such as a `ProxyCommand`, can turn deploy into local command execution on the deploy machine.
 

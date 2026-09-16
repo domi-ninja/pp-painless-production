@@ -16,6 +16,9 @@ type Runner struct {
 
 // Send preflight scripts on stdin so failures do not dump shell code into errors.
 func (r Runner) SSHScript(dir, target, script string) error {
+	if err := validateSSHTarget(target); err != nil {
+		return err
+	}
 	cmd := exec.Command("ssh", target, "sh -s")
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(script)

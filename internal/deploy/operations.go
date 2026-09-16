@@ -565,10 +565,16 @@ func (d Deployer) ApplyRoutes(plan Plan, bundle Bundle) error {
 }
 
 func (d Deployer) Remote(sshTarget string, command string) error {
+	if err := validateSSHTarget(sshTarget); err != nil {
+		return err
+	}
 	return d.Runner.Run(d.Root, "ssh", sshTarget, command)
 }
 
 func (d Deployer) Copy(local string, sshTarget string, remotePath string) error {
+	if err := validateSSHTarget(sshTarget); err != nil {
+		return err
+	}
 	return d.Runner.Run(d.Root, "scp", local, sshTarget+":"+remotePath)
 }
 
