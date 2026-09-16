@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -118,7 +119,10 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 				envFiles = append(envFiles, envFile)
 			}
 
-			composeService := renderComposeService(plan, hostPlan.ID, serviceID, service, vars, envValues, envFile)
+			composeService, err := renderComposeService(plan, hostPlan.ID, serviceID, service, vars, envValues, envFile)
+			if err != nil {
+				return Bundle{}, err
+			}
 			compose.Services[serviceID] = composeService
 			if shouldPullService(service) {
 				pullServices = append(pullServices, serviceID)
@@ -305,7 +309,7 @@ func routeBelongsToHost(cfg Config, route Route, hostID string) bool {
 	return ok && contains(service.Hosts, hostID)
 }
 
-func renderComposeService(plan Plan, hostID string, serviceID string, service Service, vars RenderVars, envValues map[string]string, envFile string) ComposeService {
+func renderComposeService(plan Plan, hostID string, serviceID string, service Service, vars RenderVars, envValues map[string]string, envFile string) (ComposeService, error) {
 	labels := map[string]string{
 		"pp.project":     plan.Config.Project.Name,
 		"pp.environment": plan.Config.Project.Environment,
@@ -328,8 +332,13 @@ func renderComposeService(plan Plan, hostID string, serviceID string, service Se
 		out.EnvFile = []string{filepath.ToSlash(filepath.Join("env", filepath.Base(envFile)))}
 	}
 	if service.Health.HTTP != "" {
+		healthURL := RenderValue(service.Health.HTTP, plan, hostID, envValues)
+		parsed, err := url.Parse(healthURL)
+		if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || strings.ContainsFunc(healthURL, func(r rune) bool { return r <= ' ' || r == 127 }) {
+			return ComposeService{}, fmt.Errorf("service %s health.http must render to an HTTP(S) URL without credentials, whitespace or control characters", serviceID)
+		}
 		out.Healthcheck = &Healthcheck{
-			Test:     []string{"CMD-SHELL", "wget -q --spider " + shellEscapeHealthURL(RenderValue(service.Health.HTTP, plan, hostID, envValues))},
+			Test:     []string{"CMD", "wget", "-q", "--spider", "--", healthURL},
 			Interval: "10s",
 			Timeout:  "5s",
 			Retries:  healthRetries(service.Health.TimeoutSeconds),
@@ -346,7 +355,7 @@ func renderComposeService(plan Plan, hostID string, serviceID string, service Se
 			Retries:  healthRetries(service.Health.TimeoutSeconds),
 		}
 	}
-	return out
+	return out, nil
 }
 
 func renderServiceEnv(root string, envDir string, serviceID string, env EnvSpec) (string, error) {
@@ -457,10 +466,6 @@ func healthRetries(timeoutSeconds int) int {
 		return 1
 	}
 	return retries
-}
-
-func shellEscapeHealthURL(value string) string {
-	return strings.ReplaceAll(value, "'", "'\"'\"'")
 }
 
 func escapeEnvValue(value string) string {
