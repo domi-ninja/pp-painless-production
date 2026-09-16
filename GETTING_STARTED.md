@@ -26,7 +26,7 @@ Keep the full clone. To update, pull the source, review the changes, run the tes
 
 ## 2. Prepare a host, usually once
 
-Skip this step if your host already has Docker Engine, the Compose plugin, SSH access and the permissions below. Public HTTPS routes also need host-level Caddy and inbound ports 80/443.
+Skip this step if your host already has Docker Engine, Compose 2.30+ with raw env-file support, SSH access and the permissions below. Public HTTPS routes also need host-level Caddy and inbound ports 80/443.
 
 For a new Ubuntu 22.04+ host, work from the tool's clone:
 

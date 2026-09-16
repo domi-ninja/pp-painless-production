@@ -42,7 +42,8 @@ func TestRenderBundleWritesComposeAndEnv(t *testing.T) {
 	for _, wanted := range []string{
 		"image: quotes:abcdef1234567890",
 		"- 127.0.0.1:443:3000",
-		"- env/web.env",
+		"path: env/web.env",
+		"format: raw",
 		"pp.release: 20260628T100000Z-abcdef1",
 	} {
 		if !strings.Contains(composeText, wanted) {

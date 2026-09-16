@@ -2,6 +2,8 @@
 
 Go implementation of the side-project deployment system.
 
+New bundles require Docker Compose 2.30+ with raw env-file support. Compose values escape literal dollars and service env files preserve literal values. Old rollback bundles are not rewritten; regenerate a release to apply these protections.
+
 ## Current Slice
 
 - `go run ./cmd/deploy --help`

@@ -23,7 +23,7 @@ type ComposeService struct {
 	Command     []string          `yaml:"command,omitempty"`
 	Entrypoint  []string          `yaml:"entrypoint,omitempty"`
 	Ports       []string          `yaml:"ports,omitempty"`
-	EnvFile     []string          `yaml:"env_file,omitempty"`
+	EnvFile     []ComposeEnvFile  `yaml:"env_file,omitempty"`
 	Environment map[string]string `yaml:"environment,omitempty"`
 	Volumes     []string          `yaml:"volumes,omitempty"`
 	Labels      map[string]string `yaml:"labels,omitempty"`
@@ -35,6 +35,11 @@ type Healthcheck struct {
 	Interval string   `yaml:"interval,omitempty"`
 	Timeout  string   `yaml:"timeout,omitempty"`
 	Retries  int      `yaml:"retries,omitempty"`
+}
+
+type ComposeEnvFile struct {
+	Path   string `yaml:"path"`
+	Format string `yaml:"format"`
 }
 
 type ComposeVolume struct {
@@ -142,7 +147,7 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 		}
 
 		composePath := filepath.Join(hostDir, "compose.yml")
-		if err := writeYAML(composePath, compose); err != nil {
+		if err := writeComposeYAML(composePath, compose); err != nil {
 			return Bundle{}, err
 		}
 		routesPath, err := renderCaddyRoutes(root, hostDir, plan, hostPlan.ID, envValues)
@@ -329,7 +334,7 @@ func renderComposeService(plan Plan, hostID string, serviceID string, service Se
 		Environment: renderEnvironment(plan, hostID, envValues, service.Environment, service.CommandEnv),
 	}
 	if envFile != "" {
-		out.EnvFile = []string{filepath.ToSlash(filepath.Join("env", filepath.Base(envFile)))}
+		out.EnvFile = []ComposeEnvFile{{Path: filepath.ToSlash(filepath.Join("env", filepath.Base(envFile))), Format: "raw"}}
 	}
 	if service.Health.HTTP != "" {
 		healthURL := RenderValue(service.Health.HTTP, plan, hostID, envValues)
@@ -391,7 +396,10 @@ func renderServiceEnv(root string, envDir string, serviceID string, env EnvSpec)
 	for _, key := range keys {
 		body.WriteString(key)
 		body.WriteByte('=')
-		body.WriteString(escapeEnvValue(values[key]))
+		if strings.ContainsAny(key, "=\r\n") || strings.ContainsAny(values[key], "\r\n") {
+			return "", fmt.Errorf("env for %s contains an unsupported multiline key or value", serviceID)
+		}
+		body.WriteString(values[key])
 		body.WriteByte('\n')
 	}
 
@@ -468,11 +476,27 @@ func healthRetries(timeoutSeconds int) int {
 	return retries
 }
 
-func escapeEnvValue(value string) string {
-	if strings.ContainsAny(value, "\n\r") {
-		value = strings.NewReplacer("\n", "\\n", "\r", "\\r").Replace(value)
+// Compose performs another interpolation pass after pp. Escape only YAML values,
+// not mapping keys or the raw env files that Compose reads separately.
+func writeComposeYAML(path string, compose ComposeFile) error {
+	var node yaml.Node
+	if err := node.Encode(compose); err != nil {
+		return err
 	}
-	return value
+	var escape func(*yaml.Node)
+	escape = func(n *yaml.Node) {
+		if n.Kind == yaml.ScalarNode && n.Tag == "!!str" {
+			n.Value = strings.ReplaceAll(n.Value, "$", "$$")
+		}
+		for i, child := range n.Content {
+			if n.Kind == yaml.MappingNode && i%2 == 0 {
+				continue
+			}
+			escape(child)
+		}
+	}
+	escape(&node)
+	return writeYAML(path, &node)
 }
 
 func writeYAML(path string, value any) error {
