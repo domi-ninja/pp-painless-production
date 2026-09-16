@@ -13,13 +13,14 @@ New bundles require Docker Compose 2.30+ with raw env-file support. Compose valu
 - `go run ./cmd/deploy status`
 - `go run ./cmd/deploy rollback`
 - `go run ./cmd/deploy down`
+- `go run ./cmd/deploy cleanup --dry-run`
 - Installed locally as `pp`.
 
 `deploy plan` loads `deploy.yml`, validates schema references and required env values, reads git metadata, computes a timestamp-plus-SHA release ID, and prints host/service placement.
 
-`deploy` builds the configured Docker image locally, exports it to `.deploy/<project>/<environment>/releases/<release>/images/`, renders per-host compose bundles, transfers bundles and image tar files over SSH, runs `docker load`, then runs `docker compose up -d` on each host. After a successful deployment, it prints the resolved IP addresses for each deployment domain.
+`deploy` builds images locally with a dedicated Buildx builder, exports them to `.deploy/<project>/<environment>/releases/<release>/images/`, renders per-host Compose bundles, transfers only the images each host uses over SSH, runs `docker load`, then runs `docker compose up -d`. Uploaded image tarballs are removed after loading and pinning. After a successful deployment, it prints the resolved IP addresses for each deployment domain.
 
-For upstream images, `pull: if_missing` checks the host's image cache before pulling, including `:latest`. `pull: always` refreshes the image; `pull: never` or an omitted policy requires an image already loaded on the host. Compose startup never pulls a second time. Rollback uses saved bundles and available images without refreshing upstream tags.
+For upstream images, `pull: if_missing` checks the host's image cache before pulling, including `:latest`. A private pp cache preserves this behavior after pp removes a source tag it introduced. `pull: always` refreshes the image; `pull: never` or an omitted policy requires an image already loaded on the host. Compose startup never pulls a second time. New releases record exact image IDs and use release-specific `pp.local/` tags, so rollback does not resolve mutable upstream tags again. Built images can be restored from local archives; upstream images must remain on the host.
 
 Use `published: auto` for route-backed services. `pp` allocates a stable localhost backend port from `18000-19999`, stores it on the host under `/etc/pp/ports.tsv`, and renders Caddy routes to the allocated port.
 
@@ -53,6 +54,38 @@ For a new deployment of project `shop`, environment `dev`:
 `down` requires both `pp.project` and `pp.environment` labels. State and rollback records must match the selected deployment. `plan` prints its identity.
 
 Explicit bind paths, external volumes, fixed ports, image tags, domains and credentials remain your configuration's responsibility. Give them separate values where sharing would be unsafe. Hooks and helper scripts must also select containers using both labels. The CLI cannot isolate arbitrary shell commands.
+
+## Retention and cleanup
+
+Cleanup runs before a deployment and again when it finishes, including failed attempts. Defaults are finite per project/environment:
+
+```yaml
+retention:
+  releases: 3          # Successful releases total, including current and previous
+  failed: 1           # Failed or interrupted attempts
+  min_free_mb: 1024    # Free-space reserve, MiB
+  build_cache_mb: 10240 # Dedicated builder cache target, MiB
+```
+
+Omitted or zero values use these defaults. At least two successful releases and one failed attempt must be retained. Current and previous releases are always protected, including after rollback.
+
+```sh
+pp cleanup --dry-run
+pp cleanup
+pp cleanup --config deploy.dev.yml
+```
+
+Cleanup removes expired local and remote bundles, including old secrets, and tracked Docker image references. It never forces image removal or prunes volumes, containers, unrelated images or the default build cache. Legacy Docker images without ownership records stay untouched; legacy bundle directories can expire normally. Dry-run lists candidates without contacting hosts or deleting artifacts, though loading old state can migrate local metadata.
+
+Local migration images get their own release aliases and recorded IDs. Rollback uses the recorded migration image rather than guessing from the application's first build. Migration image caches follow the same release retention; existing operator-owned source tags remain untouched.
+
+An offline host, an active or stopped container using an expired release, or a cleanup error can temporarily exceed retention. The versioned `cleanup.json` journal remembers pending hosts, including hosts removed from the config. Other hosts still get cleaned. Affected local bundles remain available for recovery until remote cleanup succeeds. Retry with `pp cleanup`; it does not need Git history, build files or secrets. Automatic cleanup errors are reported without undoing a successful deployment.
+
+Use one persistent checkout per deployment in CI, and the same SSH account for operations on a host. Keep `.deploy/` between jobs. Checkout locks and SSH-held host locks prevent overlapping operations; losing a host lock cancels ongoing commands. These locks do not coordinate manual Docker commands or other SSH accounts.
+
+Builds use a pp-owned `docker-container` Buildx builder shared by the local user. pp prunes its cache before and after builds, including build failures; `pp cleanup` also trims an existing pp builder. Your Buildx must support `prune --max-used-space`, `--reserved-space` and `--min-free-space`. The first build downloads BuildKit; base images must be accessible to that builder, not only present in the default Docker image store. Existing default-builder cache is not adopted or pruned.
+
+Release counts are not disk quotas. pp checks local free space before building and exporting, and host bundle/Docker storage before uploading, allowing room for incoming archives. On Docker Desktop, the local daemon's storage is inside its VM; the dedicated builder's pruning policy handles that cache. Builds can still outgrow available space, and protected images, application data, backups and logs need their own disk policies.
 
 ## Migrating an existing deployment
 

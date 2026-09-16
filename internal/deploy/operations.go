@@ -12,12 +12,14 @@ import (
 )
 
 type Deployer struct {
-	Root       string
-	Out        io.Writer
-	Err        io.Writer
-	Runner     Runner
-	resolver   hostResolver
-	ConfigPath string
+	Root        string
+	Out         io.Writer
+	Err         io.Writer
+	Runner      Runner
+	resolver    hostResolver
+	ConfigPath  string
+	lockedHosts map[string]bool
+	minFreeMB   int64
 }
 
 func NewDeployer(root string, out io.Writer, errOut io.Writer) Deployer {
@@ -33,6 +35,11 @@ func NewDeployer(root string, out io.Writer, errOut io.Writer) Deployer {
 }
 
 func (d Deployer) Deploy() error {
+	unlock, err := d.operationLock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	plan, err := LoadPlan(d.Root, d.configPath())
 	if err != nil {
 		return err
@@ -50,6 +57,23 @@ func (d Deployer) Deploy() error {
 		}
 	}
 	if err := d.checkLegacyHosts(plan); err != nil {
+		return err
+	}
+	unlockHosts, err := d.lockHosts(plan, false)
+	if err != nil {
+		return err
+	}
+	defer unlockHosts()
+	d.minFreeMB = plan.Config.Retention.defaults().MinFreeMB
+	defer func() {
+		if err := d.cleanup(plan, false); err != nil {
+			fmt.Fprintf(d.Err, "cleanup pending: %v\n", err)
+		}
+	}()
+	if err := d.cleanup(plan, false); err != nil {
+		fmt.Fprintf(d.Err, "cleanup pending: %v\n", err)
+	}
+	if err := d.checkSpace(plan); err != nil {
 		return err
 	}
 	if err := d.ResolveAutoPorts(&plan); err != nil {
@@ -90,6 +114,9 @@ func (d Deployer) Deploy() error {
 
 	fmt.Fprintln(d.Out, "applying hosts")
 	checks, err := d.ApplyRelease(plan, bundle)
+	if err == nil {
+		err = d.Runner.context().Err()
+	}
 	record.Checks = checks
 	if err != nil {
 		record.Status = "failed"
@@ -146,13 +173,31 @@ func (d Deployer) Deploy() error {
 	return nil
 }
 
-func (d Deployer) BuildImages(plan Plan, bundle Bundle) error {
+func (d Deployer) BuildImages(plan Plan, bundle Bundle) (result error) {
+	builder, unlock, err := d.prepareBuilder(true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	defer func() {
+		if err := d.trimBuildCache(builder, plan.Config.Retention); err != nil {
+			if result == nil {
+				result = err
+			} else {
+				fmt.Fprintf(d.Err, "build cache cleanup failed: %v\n", err)
+			}
+		}
+	}()
+	if err := d.trimBuildCache(builder, plan.Config.Retention); err != nil {
+		return err
+	}
 	envValues, err := loadConfigEnv(d.Root, plan.Config.Env)
 	if err != nil {
 		return err
 	}
 	for _, image := range bundle.Images {
-		args := []string{"build", "-f", image.Build.Dockerfile}
+		args := []string{"buildx", "build", "--builder", builder, "--load", "-f", image.Build.Dockerfile}
+		args = append(args, "--label", "pp.project="+plan.Config.Project.Name, "--label", "pp.environment="+plan.Config.Project.Environment, "--label", "pp.release="+plan.ReleaseID)
 		if image.Build.Target != "" {
 			args = append(args, "--target", image.Build.Target)
 		}
@@ -167,6 +212,12 @@ func (d Deployer) BuildImages(plan Plan, bundle Bundle) error {
 		}
 		args = append(args, image.Build.Context)
 		if err := d.Runner.Run(d.Root, "docker", args...); err != nil {
+			return err
+		}
+		if err := d.recordBuiltImages(plan, bundle, image); err != nil {
+			return err
+		}
+		if err := d.checkExportSpace(plan, image); err != nil {
 			return err
 		}
 
@@ -189,6 +240,11 @@ func (d Deployer) RunMigrationRecord(plan Plan, rollback bool) (StepRecord, erro
 		return StepRecord{Status: "skipped", At: time.Now().UTC()}, nil
 	}
 	image := RenderTemplate(migration.Image, VarsForPlan(plan))
+	pinned, err := d.pinMigrationImage(plan, image)
+	if err != nil {
+		return StepRecord{Status: "failed", Error: err.Error(), At: time.Now().UTC()}, err
+	}
+	image = pinned
 	command := migration.Command
 	if rollback {
 		command = migration.RollbackCommand
@@ -201,7 +257,7 @@ func (d Deployer) RunMigrationRecord(plan Plan, rollback bool) (StepRecord, erro
 		EnvSource:   migration.Env.Source,
 		RestorePlan: migration.RestorePlan,
 	}
-	err := d.runMigration(migration, image, rollback)
+	err = d.runMigration(migration, image, rollback)
 	record.FinishedAt = time.Now().UTC()
 	record.At = record.FinishedAt
 	if err != nil {
@@ -225,7 +281,7 @@ func (d Deployer) runMigration(migration *Migration, image string, rollback bool
 		return fmt.Errorf("migration command is empty")
 	}
 
-	args := []string{"run", "--rm"}
+	args := []string{"run", "--rm", "--pull", "never"}
 	if migration.Env.Source != "" {
 		args = append(args, "--env-file", filepath.Join(d.Root, migration.Env.Source))
 	}
@@ -238,17 +294,27 @@ func (d Deployer) runMigration(migration *Migration, image string, rollback bool
 
 func (d Deployer) ApplyBundle(plan Plan, bundle Bundle) error {
 	for _, host := range bundle.Hosts {
+		images, err := imagesForHost(host, bundle.Images)
+		if err != nil {
+			return err
+		}
 		fmt.Fprintf(d.Out, "host %s: upload\n", host.ID)
-		if err := d.UploadHostBundle(host, bundle.Images); err != nil {
+		if err := d.UploadHostBundle(host, images); err != nil {
 			return fmt.Errorf("host %s upload: %w", host.ID, err)
 		}
-		for _, image := range bundle.Images {
+		for _, image := range images {
 			fmt.Fprintf(d.Out, "host %s: docker load %s\n", host.ID, image.ID)
 			if err := d.Remote(host.SSH, "docker load -i "+shellQuote(host.RemoteDir+"/images/"+filepath.Base(image.Tar))); err != nil {
 				return fmt.Errorf("host %s docker load: %w", host.ID, err)
 			}
 		}
 		if err := d.PullHostImages(plan, host); err != nil {
+			return err
+		}
+		if err := d.pinHostImages(plan, host); err != nil {
+			return err
+		}
+		if err := d.removeUploadedImages(host, images); err != nil {
 			return err
 		}
 		fmt.Fprintf(d.Out, "host %s: compose up\n", host.ID)
@@ -299,17 +365,27 @@ func (d Deployer) ApplyRelease(plan Plan, bundle Bundle) ([]CheckRecord, error) 
 
 func (d Deployer) UploadLoadPull(plan Plan, bundle Bundle) error {
 	for _, host := range bundle.Hosts {
+		images, err := imagesForHost(host, bundle.Images)
+		if err != nil {
+			return err
+		}
 		fmt.Fprintf(d.Out, "host %s: upload\n", host.ID)
-		if err := d.UploadHostBundle(host, bundle.Images); err != nil {
+		if err := d.UploadHostBundle(host, images); err != nil {
 			return fmt.Errorf("host %s upload: %w", host.ID, err)
 		}
-		for _, image := range bundle.Images {
+		for _, image := range images {
 			fmt.Fprintf(d.Out, "host %s: docker load %s\n", host.ID, image.ID)
 			if err := d.Remote(host.SSH, "docker load -i "+shellQuote(host.RemoteDir+"/images/"+filepath.Base(image.Tar))); err != nil {
 				return fmt.Errorf("host %s docker load: %w", host.ID, err)
 			}
 		}
 		if err := d.PullHostImages(plan, host); err != nil {
+			return err
+		}
+		if err := d.pinHostImages(plan, host); err != nil {
+			return err
+		}
+		if err := d.removeUploadedImages(host, images); err != nil {
 			return err
 		}
 	}
@@ -334,9 +410,19 @@ func (d Deployer) PullHostImages(plan Plan, host HostBundle) error {
 	if len(host.PullServices) == 0 {
 		return nil
 	}
+	if err := d.prepareSourceImages(plan, host); err != nil {
+		return err
+	}
 	fmt.Fprintf(d.Out, "host %s: checking images\n", host.ID)
-	if err := d.Runner.SSHScript(d.Root, host.SSH, pullHostImagesScript(plan, host)); err != nil {
-		return fmt.Errorf("host %s image pull: %w", host.ID, err)
+	pullErr := d.Runner.SSHScript(d.Root, host.SSH, pullHostImagesScript(plan, host))
+	if err := d.recordPulledSources(plan, host); err != nil {
+		if pullErr == nil {
+			return err
+		}
+		fmt.Fprintf(d.Err, "could not record partially pulled images: %v\n", err)
+	}
+	if pullErr != nil {
+		return fmt.Errorf("host %s image pull: %w", host.ID, pullErr)
 	}
 	return nil
 }
@@ -518,6 +604,24 @@ func optionalTimeoutContext(seconds int) (context.Context, context.CancelFunc) {
 }
 
 func (d Deployer) UploadHostBundle(host HostBundle, images []ImageBundle) error {
+	if err := recordHostBuilds(host, images); err != nil {
+		return err
+	}
+	var bytes int64
+	for _, image := range images {
+		info, err := os.Stat(image.Tar)
+		if err != nil {
+			return err
+		}
+		bytes += info.Size()
+	}
+	reserve := d.minFreeMB
+	if reserve == 0 {
+		reserve = 1024
+	}
+	if err := d.Runner.SSHScript(d.Root, host.SSH, spaceScript(".", bytes+reserve*1024*1024)+"\n"+spaceScript("$(docker info --format '{{.DockerRootDir}}')", 2*bytes+reserve*1024*1024)); err != nil {
+		return err
+	}
 	dirs := shellJoin([]string{host.RemoteDir, host.RemoteDir + "/env", host.RemoteDir + "/images"})
 	if err := d.Remote(host.SSH, "umask 077; mkdir -p "+dirs+" && chmod 0700 "+dirs); err != nil {
 		return err
@@ -611,6 +715,11 @@ func (d Deployer) Status() error {
 }
 
 func (d Deployer) Down() error {
+	unlock, err := d.operationLock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	plan, err := LoadPlan(d.Root, d.configPath())
 	if err != nil {
 		return err
@@ -621,6 +730,11 @@ func (d Deployer) Down() error {
 	if err := d.checkLegacyHosts(plan); err != nil {
 		return err
 	}
+	unlockHosts, err := d.lockHosts(plan, false)
+	if err != nil {
+		return err
+	}
+	defer unlockHosts()
 
 	for _, host := range plan.Hosts {
 		if len(host.Services) == 0 {
@@ -635,6 +749,11 @@ func (d Deployer) Down() error {
 }
 
 func (d Deployer) Rollback() error {
+	unlock, err := d.operationLock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	plan, err := LoadPlan(d.Root, d.configPath())
 	if err != nil {
 		return err
@@ -658,11 +777,25 @@ func (d Deployer) Rollback() error {
 	if err := d.checkLegacyHosts(plan); err != nil {
 		return err
 	}
+	unlockHosts, err := d.lockHosts(plan, true)
+	if err != nil {
+		return err
+	}
+	defer unlockHosts()
 	if plan.Config.Migrations != nil && current.ReleaseID != "" {
 		fmt.Fprintln(d.Out, "running DB rollback")
 		image := plan.Config.Migrations.Image
 		if len(current.ImageTags) > 0 {
 			image = current.ImageTags[0]
+		}
+		manifest, err := readImageManifest(filepath.Join(current.BundlePath, "images.json"))
+		if err != nil {
+			return err
+		}
+		if imageIDPattern.MatchString(current.Migration.Image) {
+			image = current.Migration.Image
+		} else if len(manifest.Images) > 0 {
+			image = manifest.Images[0].ID
 		}
 		if err := d.runMigration(plan.Config.Migrations, image, true); err != nil {
 			return err
@@ -672,6 +805,9 @@ func (d Deployer) Rollback() error {
 	bundle := bundleFromRecord(previous)
 	fmt.Fprintf(d.Out, "rolling back to %s\n", previous.ReleaseID)
 	if _, err := d.ApplyRelease(planForRecord(plan, previous), bundle); err != nil {
+		return err
+	}
+	if err := d.Runner.context().Err(); err != nil {
 		return err
 	}
 

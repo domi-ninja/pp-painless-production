@@ -10,8 +10,16 @@ import (
 )
 
 type Runner struct {
-	Stdout io.Writer
-	Stderr io.Writer
+	Context context.Context
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
+func (r Runner) context() context.Context {
+	if r.Context != nil {
+		return r.Context
+	}
+	return context.Background()
 }
 
 // Send preflight scripts on stdin so failures do not dump shell code into errors.
@@ -19,7 +27,7 @@ func (r Runner) SSHScript(dir, target, script string) error {
 	if err := validateSSHTarget(target); err != nil {
 		return err
 	}
-	cmd := exec.Command("ssh", target, "sh -s")
+	cmd := exec.CommandContext(r.context(), "ssh", target, "sh -s")
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Stdout, cmd.Stderr = r.Stdout, r.Stderr
@@ -30,7 +38,7 @@ func (r Runner) SSHScript(dir, target, script string) error {
 }
 
 func (r Runner) Run(dir string, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(r.context(), name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = r.Stdout
 	cmd.Stderr = r.Stderr
@@ -45,6 +53,10 @@ func (r Runner) RunEnv(dir string, env map[string]string, name string, args ...s
 }
 
 func (r Runner) RunEnvContext(ctx context.Context, dir string, env map[string]string, name string, args ...string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(r.context(), cancel)
+	defer stop()
+	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = r.Stdout
@@ -63,7 +75,7 @@ func (r Runner) RunEnvContext(ctx context.Context, dir string, env map[string]st
 }
 
 func (r Runner) Output(dir string, name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(r.context(), name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

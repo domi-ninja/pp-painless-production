@@ -14,6 +14,7 @@ import (
 
 type Config struct {
 	Version    int                `yaml:"version"`
+	Retention  Retention          `yaml:"retention,omitempty"`
 	Project    Project            `yaml:"project"`
 	Env        EnvSpec            `yaml:"env"`
 	Build      Build              `yaml:"build"`
@@ -225,6 +226,9 @@ func LoadConfig(root string, configPath string) (Config, error) {
 
 func ValidateConfig(root string, cfg Config) error {
 	var problems []string
+	if err := cfg.Retention.validate(); err != nil {
+		problems = append(problems, err.Error())
+	}
 
 	if cfg.Version != CurrentConfigVersion {
 		problems = append(problems, fmt.Sprintf("unsupported config version %d; this pp supports version %d (upgrade pp for newer configs)", cfg.Version, CurrentConfigVersion))

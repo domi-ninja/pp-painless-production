@@ -81,6 +81,15 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 		return Bundle{}, err
 	}
 	bundleRoot := filepath.Join(plan.Config.Project.localDir(root), "releases", plan.ReleaseID)
+	if err := os.MkdirAll(filepath.Dir(bundleRoot), 0700); err != nil {
+		return Bundle{}, err
+	}
+	if err := os.Mkdir(bundleRoot, 0700); err != nil {
+		return Bundle{}, fmt.Errorf("create new release (never overwrite an existing release): %w", err)
+	}
+	if err := SaveRelease(root, recordFromPlan(plan, Bundle{Root: bundleRoot}, "")); err != nil {
+		return Bundle{}, err
+	}
 	imagesDir := filepath.Join(bundleRoot, "images")
 	if err := os.MkdirAll(imagesDir, 0755); err != nil {
 		return Bundle{}, fmt.Errorf("create image dir: %w", err)

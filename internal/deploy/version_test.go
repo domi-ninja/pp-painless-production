@@ -193,10 +193,24 @@ func TestAdoptedDeployAndRollbackKeepResourceIdentity(t *testing.T) {
 		}
 	}
 	log := filepath.Join(root, "commands")
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PP_TEST_COMMAND_LOG", log)
 	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
 	for _, name := range []string{"docker", "scp", "ssh"} {
-		writeExecutable(t, root, name, "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$PP_TEST_COMMAND_LOG\"\nif [ \"$2\" = 'sh -s' ]; then cat >/dev/null; fi\nexit 0\n")
+		writeExecutable(t, root, name, `#!/bin/sh
+printf '%s\n' "$*" >> "$PP_TEST_COMMAND_LOG"
+case "$*" in
+  *pp-lock-ready*) printf 'pp-lock-ready\n'; cat >/dev/null; exit 0 ;;
+  'buildx inspect '*--bootstrap) exit 0 ;;
+  'buildx inspect '*) exit 1 ;;
+  *'image inspect --format '{{.Id}}*|*"image inspect --format '{{.Id}}'"*) printf 'sha256:%064d\n' 1; exit 0 ;;
+  'info --format '*) echo /; exit 0 ;;
+  *'{{.Size}}'*) echo 1024; exit 0 ;;
+  'save -o '*) touch "$3" ;;
+esac
+if [ "$2" = 'sh -s' ]; then cat >/dev/null; fi
+exit 0
+`)
 	}
 	var out bytes.Buffer
 	d := NewDeployer(root, &out, &out)

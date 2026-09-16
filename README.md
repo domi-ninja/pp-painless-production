@@ -23,6 +23,8 @@ Each app has its own committed `deploy.yml`. It describes the images, target hos
 
 Project and environment identify each deployment. Use `pp deploy --config deploy.dev.yml` to select a different config. Local state and release metadata live under `.deploy/<project>/<environment>/`; older state upgrades automatically while preserving existing resource names and rollback history.
 
+Automatic cleanup keeps three successful releases and one failed attempt by default. Current and previous releases stay protected. Preview cleanup with `pp cleanup --dry-run`; see [retention settings](docs/deploy-cli.md#retention-and-cleanup) for image and build-cache limits.
+
 - [CLI behavior and migrations](docs/deploy-cli.md)
 - [Example applications](examples/)
 - [Deployment security review](docs/security-review-deployment.md)

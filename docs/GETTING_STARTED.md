@@ -4,7 +4,7 @@ Keep two repositories separate: this tool's clone supplies `pp` and the server p
 
 ## 1. Clone and install
 
-On your deployment machine, you need Git, Go 1.23 or newer, Make, SSH/SCP and a working Docker daemon for local image builds. Install Ansible there too if you will provision servers. The CLI uses Unix file locking, so use a Linux or macOS environment.
+On your deployment machine, you need Git, Go 1.23 or newer, Make, SSH/SCP and a working Docker daemon with Buildx for local image builds. Buildx must support the cache-pruning flags listed under [retention](deploy-cli.md#retention-and-cleanup). pp creates its own builder and downloads BuildKit on first use. Install Ansible there too if you will provision servers. The CLI uses Unix file locking, so use a Linux or macOS environment.
 
 ```sh
 git clone https://github.com/domi-ninja/pp-painless-production.git
@@ -89,5 +89,7 @@ pp status
 `plan` does not deploy, though it can upgrade local state. Review the selected host and environment before running `pp`, which performs the deployment. Config paths are relative to the application's working directory.
 
 Preserve `.deploy/`: it contains local state and rollback artifacts. See the [version migration guide](deploy-cli.md#migrating-an-existing-deployment) and [deployment security review](security-review-deployment.md) before trusting this experimental tool with production secrets.
+
+pp automatically keeps three successful releases and one failed attempt, while protecting current and previous releases. Run `pp cleanup --dry-run` to preview expired bundles and image references. For CI, reuse the checkout and its `.deploy/` directory between jobs. See [retention and cleanup](deploy-cli.md#retention-and-cleanup) for limits and retry behavior.
 
 From here, ordinary app releases only need `pp`. Return to Ansible when the server itself needs a configuration change.

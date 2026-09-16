@@ -19,6 +19,10 @@ func Main(name string, args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet(name+" "+command, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", "deploy.yml", "deployment config, relative to the working directory")
+	var dryRun bool
+	if command == "cleanup" {
+		flags.BoolVar(&dryRun, "dry-run", false, "preview cleanup without deleting artifacts")
+	}
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -30,6 +34,16 @@ func Main(name string, args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 	switch command {
+	case "cleanup":
+		wd, err := os.Getwd()
+		if err == nil {
+			err = configuredDeployer(wd, *configPath, stdout, stderr).Cleanup(dryRun)
+		}
+		if err != nil {
+			printError(stderr, err)
+			return 1
+		}
+		return 0
 	case "deploy":
 		return runDeploy(*configPath, stdout, stderr)
 	case "down":
@@ -164,6 +178,7 @@ func printHelp(name string, w io.Writer) {
 	fmt.Fprintln(w, "  plan      validate deploy.yml and print host/service placement")
 	fmt.Fprintln(w, "  status    show local deployment state")
 	fmt.Fprintln(w, "  rollback  restore previous code and DB state")
+	fmt.Fprintln(w, "  cleanup   remove expired releases and owned images (--dry-run to preview)")
 }
 
 func configuredDeployer(root, configPath string, stdout, stderr io.Writer) deploy.Deployer {

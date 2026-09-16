@@ -40,11 +40,12 @@ type ImageRecord struct {
 }
 
 type HostRecord struct {
-	ID        string   `json:"id"`
-	SSH       string   `json:"ssh"`
-	Services  []string `json:"services"`
-	RemoteDir string   `json:"remote_dir"`
-	Status    string   `json:"status"`
+	Images    []ManagedImage `json:"images,omitempty"`
+	ID        string         `json:"id"`
+	SSH       string         `json:"ssh"`
+	Services  []string       `json:"services"`
+	RemoteDir string         `json:"remote_dir"`
+	Status    string         `json:"status"`
 }
 
 type StepRecord struct {
