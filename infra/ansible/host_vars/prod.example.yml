@@ -37,4 +37,4 @@ coolify_enabled: false
 
 # Keep secrets in host_vars/prod-1.credentials.local.yml or Ansible Vault.
 # pp also needs proxy-directory write access and permission to reload Caddy;
-# see GETTING_STARTED.md before the first deployment.
+# see docs/GETTING_STARTED.md before the first deployment.

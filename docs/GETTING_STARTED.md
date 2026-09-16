@@ -36,9 +36,9 @@ cp inventory/prod.example.yml inventory/prod.local.yml
 cp host_vars/prod.example.yml host_vars/prod-1.local.yml
 ```
 
-Edit the copied inventory with your server IP and bootstrap SSH user. Edit the [host-vars example](infra/ansible/host_vars/prod.example.yml) copy with your real public key and email. It enables Docker and Caddy while leaving storage changes and platform services off.
+Edit the copied inventory with your server IP and bootstrap SSH user. Edit the [host-vars example](../infra/ansible/host_vars/prod.example.yml) copy with your real public key and email. It enables Docker and Caddy while leaving storage changes and platform services off.
 
-Both `.local.yml` files are ignored by Git. Keep credentials in ignored files or Ansible Vault. Review the [provisioning settings](infra/ansible/README.md), especially SSH, firewall and storage changes, before applying them. The defaults disable root and password SSH login; keep your bootstrap session open until you have verified a fresh login as `deploy`.
+Both `.local.yml` files are ignored by Git. Keep credentials in ignored files or Ansible Vault. Review the [provisioning settings](../infra/ansible/README.md), especially SSH, firewall and storage changes, before applying them. The defaults disable root and password SSH login; keep your bootstrap session open until you have verified a fresh login as `deploy`.
 
 ```sh
 ansible-playbook -i inventory/prod.local.yml --limit prod-1 \
@@ -68,7 +68,7 @@ cd /path/to/your-app
 pp init
 ```
 
-Skip `init` if the app already has `deploy.yml`. Edit the starter's SSH target, domain and container port, and replace its `true` health check with a real check. It assumes a Dockerfile and port 3000. See the [simple website example](examples/simple-website/) or [other examples](examples/).
+Skip `init` if the app already has `deploy.yml`. Edit the starter's SSH target, domain and container port, and replace its `true` health check with a real check. It assumes a Dockerfile and port 3000. See the [simple website example](../examples/simple-website/) or [other examples](../examples/).
 
 Commit `deploy.yml`. Keep secrets out of Git and the Docker build context. `pp init` adds `.deploy/` to `.gitignore` and `.deploy` to `.dockerignore`; add your secret files separately.
 

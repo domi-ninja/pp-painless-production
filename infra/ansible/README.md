@@ -23,7 +23,7 @@ ansible-playbook -i inventory/prod.local.yml --limit prod-1 \
   playbooks/prod-server.yml
 ```
 
-Local overrides are loaded explicitly, not discovered from their `.local.yml` filename. Keep credentials in ignored files or Ansible Vault. Read [Getting started](../../GETTING_STARTED.md#2-prepare-a-host-usually-once) for SSH lockout precautions and the additional proxy permissions `pp` needs.
+Local overrides are loaded explicitly, not discovered from their `.local.yml` filename. Keep credentials in ignored files or Ansible Vault. Read [Getting started](../../docs/GETTING_STARTED.md#2-prepare-a-host-usually-once) for SSH lockout precautions and the additional proxy permissions `pp` needs.
 
 After verifying a fresh `deploy` login, update `ansible_user` in the inventory for subsequent runs.
 

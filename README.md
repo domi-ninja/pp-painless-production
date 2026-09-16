@@ -13,7 +13,7 @@ pp rollback # Reapply the previous release
 
 This is an experimental tool meant to be used from a full clone of this repository. Keep the source, examples and Ansible playbook together, and build the CLI locally with `make install`. Expect to inspect and adapt the configuration for your hosts. This is not a standalone binary installer or a managed hosting service.
 
-Follow [Getting started](GETTING_STARTED.md) to clone the repo, install `pp`, prepare a server if needed, and deploy your first app.
+Follow [Getting started](docs/GETTING_STARTED.md) to clone the repo, install `pp`, prepare a server if needed, and deploy your first app.
 
 ## Everyday deployment
 
@@ -23,9 +23,9 @@ Each app has its own committed `deploy.yml`. It describes the images, target hos
 
 Project and environment identify each deployment. Use `pp deploy --config deploy.dev.yml` to select a different config. Local state and release metadata live under `.deploy/<project>/<environment>/`; older state upgrades automatically while preserving existing resource names and rollback history.
 
-- [CLI behavior and migrations](deploy-cli.md)
+- [CLI behavior and migrations](docs/deploy-cli.md)
 - [Example applications](examples/)
-- [Deployment security review](security-review-deployment.md)
+- [Deployment security review](docs/security-review-deployment.md)
 
 ## Server provisioning, occasionally
 
@@ -38,12 +38,13 @@ After setup, return to your app repository and use `pp`. You do not need to reru
 ```text
 cmd/deploy/       CLI entrypoint, built and installed as pp
 internal/deploy/  Deployment implementation
+docs/             Guides, design notes and security review
 examples/         Application deployment configs
 infra/ansible/    Occasional server provisioning
 tickets/          Implementation work
 ```
 
-The `deployment-*.md` files contain design notes; [deploy-cli.md](deploy-cli.md) describes current behavior.
+The `docs/deployment-*.md` files contain design notes; [deploy-cli.md](docs/deploy-cli.md) describes current behavior.
 
 ## What does `pp` stand for?
 
