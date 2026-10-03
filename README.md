@@ -28,6 +28,7 @@ Automatic cleanup keeps three successful releases and one failed attempt by defa
 - [CLI behavior and migrations](docs/deploy-cli.md)
 - [Example applications](examples/)
 - [Deployment security review](docs/security-review-deployment.md)
+- [Fleet maintenance record, 2026-10-03](docs/fleet-maintenance-2026-10-03.md)
 
 When updating several applications, run `pp plan` in each checkout and preserve its project/environment identity, data paths, and `.deploy` history. Review uncommitted changes before building: `pp deploy` includes the working tree, not just Git HEAD. Run releases sequentially for projects sharing a host, and verify each application's checks and recorded commit before proceeding. Updating pp does not require credential rotation or an infrastructure image upgrade.
 

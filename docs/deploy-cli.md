@@ -28,6 +28,12 @@ Both fixed and automatic ports bind to `127.0.0.1` unless `host_ip` is explicit.
 
 `status` reads local deployment metadata. `rollback` re-applies the previous local release bundle and runs a configured DB rollback command when migrations are configured.
 
+## Startup checks
+
+In a phased deployment, pp waits for infrastructure and backend services before hooks, but starts frontend services without Compose's `--wait`. An HTTP smoke check makes one request; `timeout_seconds` is a request timeout, not a readiness retry window. For an application that takes time to start, use a command smoke check with bounded retries, such as `curl --fail --retry 12 --retry-all-errors --retry-delay 2 --max-time 10 --output /dev/null https://example.com/health`, with an overall command timeout. Authentication checks should read credentials from their environment, not command arguments or logged configuration.
+
+For systemd deployment jobs, explicitly set `User=` so the service gets its login environment, including the home directory used by pp and SSH. Validate the execution environment and `pp plan` before stopping services or modifying data.
+
 ## Environment isolation
 
 Service `env.required` lists the keys injected from `env.source`, as well as validating their presence. Declare every key the service needs. A source without a key list is rejected unless you explicitly set `env.include_all: true`. This restriction applies to service env files, not build or operator-run hook inputs.
