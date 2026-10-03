@@ -4,15 +4,20 @@ www.convex.example.com {
 
 api.convex.example.com {
 	route {
-		@options method OPTIONS
+		@options {
+			method OPTIONS
+			header Origin https://convex.example.com
+		}
 		handle @options {
-			header Access-Control-Allow-Origin {header.Origin}
+			header Access-Control-Allow-Origin https://convex.example.com
 			header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
 			header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cookie, Set-Cookie, better-auth-cookie, Convex-Client"
 			header Access-Control-Allow-Credentials true
 			header Access-Control-Max-Age 86400
 			respond 204
 		}
+		@other_options method OPTIONS
+		respond @other_options 403
 
 		@websocket {
 			header Connection *Upgrade*
@@ -31,10 +36,6 @@ api.convex.example.com {
 			reverse_proxy 127.0.0.1:${service.convex-backend.port.3210}
 		}
 	}
-}
-
-dashboard.convex.example.com {
-	reverse_proxy 127.0.0.1:${service.convex-dashboard.port.3211}
 }
 
 convex.example.com {

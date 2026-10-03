@@ -8,7 +8,7 @@ build:
   context: .
   dockerfile: Dockerfile
   tags:
-    - "stateful-go-website:${git_sha}"
+    - "stateful-go-website:${release}"
 
 hosts:
   server:
@@ -17,7 +17,7 @@ hosts:
 
 services:
   web:
-    image: "stateful-go-website:${git_sha}"
+    image: "stateful-go-website:${release}"
     hosts: [server]
     env:
       source: ".env"
@@ -39,3 +39,9 @@ routes:
 volumes:
   stateful-go-website-data:
     driver: local
+
+checks:
+  smoke:
+    - name: public health
+      url: https://stateful.example.com/health
+      expect_status: 200

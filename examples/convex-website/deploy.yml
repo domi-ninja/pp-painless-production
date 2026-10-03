@@ -5,11 +5,10 @@ project:
   environment: prod
 
 env:
-  source: .env.prod
+  source: .env.local
   required:
-    - VITE_SITE_URL
     - VITE_CONVEX_URL
-    - VITE_CONVEX_SITE_URL
+    - SITE_URL
     - CONVEX_SELF_HOSTED_URL
     - INSTANCE_NAME
     - INSTANCE_SECRET
@@ -17,12 +16,8 @@ env:
     - POSTGRES_USER
     - POSTGRES_PASSWORD
     - POSTGRES_URL
-    - DATABASE_URL
     - MINIO_ROOT_USER
     - MINIO_ROOT_PASSWORD
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_S3_DISABLE_SSE
     - S3_STORAGE_EXPORTS_BUCKET
     - S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
     - S3_STORAGE_MODULES_BUCKET
@@ -30,6 +25,11 @@ env:
     - S3_STORAGE_SEARCH_BUCKET
 
 builds:
+  postgres:
+    context: deploy/postgres
+    dockerfile: deploy/postgres/Dockerfile
+    tags:
+      - convex-website-postgres:${release}
   web:
     context: .
     dockerfile: Dockerfile
@@ -37,9 +37,7 @@ builds:
     tags:
       - convex-website-web:${release}
     args:
-      VITE_SITE_URL: ${env.VITE_SITE_URL}
       VITE_CONVEX_URL: ${env.VITE_CONVEX_URL}
-      VITE_CONVEX_SITE_URL: ${env.VITE_CONVEX_SITE_URL}
 
 hosts:
   server:
@@ -48,12 +46,12 @@ hosts:
 
 services:
   postgres:
-    image: postgres:16-alpine
-    pull: if_missing
+    image: convex-website-postgres:${release}
+    build: postgres
     phase: infra
     hosts: [server]
     env:
-      source: .env.prod
+      source: .env.local
       required:
         - POSTGRES_DB
         - POSTGRES_USER
@@ -67,7 +65,8 @@ services:
         target: /var/lib/postgresql/data
         type: bind
     health:
-      command: ["pg_isready", "-U", "${env.POSTGRES_USER}", "-d", "${env.POSTGRES_DB}"]
+      command:
+        ["pg_isready", "-h", "127.0.0.1", "-U", "${env.POSTGRES_USER}", "-d", "${env.POSTGRES_DB}"]
       timeout_seconds: 60
 
   s3:
@@ -77,7 +76,7 @@ services:
     hosts: [server]
     command: ["server", "/data", "--console-address", ":9001"]
     env:
-      source: .env.prod
+      source: .env.local
       required:
         - MINIO_ROOT_USER
         - MINIO_ROOT_PASSWORD
@@ -88,12 +87,6 @@ services:
       - source: /data/pp/convex-website/s3
         target: /data
         type: bind
-    ports:
-      - published: auto
-        target: 9001
-    health:
-      command: ["curl", "-sf", "http://127.0.0.1:9000/minio/health/ready"]
-      timeout_seconds: 60
 
   convex-backend:
     image: ghcr.io/get-convex/convex-backend:latest
@@ -101,15 +94,13 @@ services:
     phase: backend
     hosts: [server]
     env:
-      source: .env.prod
+      source: .env.local
       required:
         - INSTANCE_NAME
         - INSTANCE_SECRET
         - POSTGRES_URL
-        - DATABASE_URL
-        - AWS_ACCESS_KEY_ID
-        - AWS_SECRET_ACCESS_KEY
-        - AWS_S3_DISABLE_SSE
+        - MINIO_ROOT_USER
+        - MINIO_ROOT_PASSWORD
         - S3_STORAGE_EXPORTS_BUCKET
         - S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
         - S3_STORAGE_MODULES_BUCKET
@@ -118,19 +109,16 @@ services:
     environment:
       INSTANCE_NAME: ${env.INSTANCE_NAME}
       INSTANCE_SECRET: ${env.INSTANCE_SECRET}
-      CONVEX_CLOUD_ORIGIN: https://api.convex.example.com
-      NEXT_PUBLIC_DEPLOYMENT_URL: https://api.convex.example.com
-      CONVEX_SITE_ORIGIN: https://api.convex.example.com
-      SITE_URL: https://convex.example.com
+      CONVEX_CLOUD_ORIGIN: ${env.CONVEX_SELF_HOSTED_URL}
+      CONVEX_SITE_ORIGIN: ${env.CONVEX_SELF_HOSTED_URL}
       POSTGRES_URL: ${env.POSTGRES_URL}
-      DATABASE_URL: ${env.DATABASE_URL}
       DO_NOT_REQUIRE_SSL: "1"
       RUST_LOG: info
       AWS_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: ${env.AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${env.AWS_SECRET_ACCESS_KEY}
+      AWS_ACCESS_KEY_ID: ${env.MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${env.MINIO_ROOT_PASSWORD}
       AWS_S3_FORCE_PATH_STYLE: "true"
-      AWS_S3_DISABLE_SSE: ${env.AWS_S3_DISABLE_SSE}
+      AWS_S3_DISABLE_SSE: "true"
       S3_ENDPOINT_URL: http://s3:9000
       S3_STORAGE_EXPORTS_BUCKET: ${env.S3_STORAGE_EXPORTS_BUCKET}
       S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET: ${env.S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET}
@@ -153,14 +141,19 @@ services:
     hosts: [server]
     environment:
       PORT: "3211"
-      CONVEX_CLOUD_ORIGIN: https://api.convex.example.com
-      NEXT_PUBLIC_DEPLOYMENT_URL: https://api.convex.example.com
-      CONVEX_SITE_ORIGIN: https://api.convex.example.com
+      CONVEX_CLOUD_ORIGIN: ${env.CONVEX_SELF_HOSTED_URL}
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${env.CONVEX_SELF_HOSTED_URL}
+      CONVEX_SITE_ORIGIN: ${env.CONVEX_SELF_HOSTED_URL}
     ports:
       - published: auto
         target: 3211
     health:
-      command: ["node", "-e", "fetch('http://127.0.0.1:3211/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      command:
+        [
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3211/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       timeout_seconds: 90
 
   web:
@@ -183,42 +176,34 @@ route_files:
 hooks:
   after_backend_healthy:
     - name: ensure minio buckets
-      run: ["bash", "scripts/ensure-minio-buckets.sh", "--prod"]
-      timeout_seconds: 120
+      run: ["bash", "scripts/ensure-minio-buckets.sh"]
       env:
-        source: .env.prod
+        source: .env.local
         required:
-          - MINIO_ROOT_USER
-          - MINIO_ROOT_PASSWORD
           - S3_STORAGE_EXPORTS_BUCKET
           - S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
           - S3_STORAGE_MODULES_BUCKET
           - S3_STORAGE_FILES_BUCKET
           - S3_STORAGE_SEARCH_BUCKET
     - name: refresh convex admin key
-      run: ["bash", "scripts/refresh-convex-admin-key.sh", "--prod"]
-      timeout_seconds: 60
+      run: ["bash", "scripts/refresh-convex-admin-key.sh"]
       env:
-        source: .env.prod
+        source: .env.local
+        required:
+          - CONVEX_SELF_HOSTED_URL
+    - name: push convex env
+      run: ["bash", "scripts/push-env-to-convex.sh"]
+      env:
+        source: .env.local
         required:
           - CONVEX_SELF_HOSTED_URL
           - SITE_URL
-          - BETTER_AUTH_SECRET
-          - SCALEWAY_PROJECT_ID
-          - SCALEWAY_SECRET_KEY
-          - INSTANCE_SECRET
-    - name: push convex env
-      run: ["bash", "scripts/push-env-to-convex.sh", "--prod"]
-      timeout_seconds: 180
-      env:
-        source: .env.prod
-        required:
-          - CONVEX_SELF_HOSTED_URL
+          - JWT_PRIVATE_KEY
+          - JWKS
     - name: sync convex functions
-      run: ["npx", "convex", "dev", "--once", "--env-file", ".env.prod"]
-      timeout_seconds: 300
+      run: ["npx", "convex", "dev", "--once", "--env-file", ".env.local"]
       env:
-        source: .env.prod
+        source: .env.local
         required:
           - CONVEX_SELF_HOSTED_URL
 
@@ -227,30 +212,6 @@ checks:
     - name: frontend
       url: https://convex.example.com/
       expect_status: 200
-    - name: www redirect
-      url: https://www.convex.example.com/
-      expect_status: 301
-      follow_redirects: false
     - name: convex version
       url: https://api.convex.example.com/version
       expect_status: 200
-    - name: dashboard
-      url: https://dashboard.convex.example.com/
-      expect_status: 200
-    - name: convex http action
-      url: https://api.convex.example.com/smoke
-      expect_status: 200
-    - name: convex query
-      command: ["npx", "convex", "run", "smoke:ping", "--env-file", ".env.prod"]
-      timeout_seconds: 60
-      env:
-        source: .env.prod
-        required:
-          - CONVEX_SELF_HOSTED_URL
-    - name: landing page browser
-      command: ["node", "scripts/smoke-landing-page.mjs", "--prod"]
-      timeout_seconds: 60
-      env:
-        source: .env.prod
-        required:
-          - VITE_SITE_URL

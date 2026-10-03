@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env.local.*
 .env.prod
 .deploy/
 
@@ -38,7 +39,6 @@ convex-overview.json
 convex-overview.cjs
 CLAUDE.md
 GEMINI.md
-AGENTS.md
 .claude-docker
 Dockerfile.claude-code
 run-claude-code.sh

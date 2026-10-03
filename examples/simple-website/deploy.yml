@@ -8,7 +8,7 @@ build:
   context: .
   dockerfile: Dockerfile
   tags:
-    - "simple-website:${git_sha}"
+    - "simple-website:${release}"
 
 hosts:
   server:
@@ -17,7 +17,7 @@ hosts:
 
 services:
   web:
-    image: "simple-website:${git_sha}"
+    image: "simple-website:${release}"
     hosts: [server]
     ports:
       - host_ip: 127.0.0.1
@@ -30,3 +30,9 @@ services:
 routes:
   - host: simple.example.com
     service: web
+
+checks:
+  smoke:
+    - name: frontend
+      url: https://simple.example.com/
+      expect_status: 200

@@ -29,6 +29,8 @@ Automatic cleanup keeps three successful releases and one failed attempt by defa
 - [Example applications](examples/)
 - [Deployment security review](docs/security-review-deployment.md)
 
+When updating several applications, run `pp plan` in each checkout and preserve its project/environment identity, data paths, and `.deploy` history. Review uncommitted changes before building: `pp deploy` includes the working tree, not just Git HEAD. Run releases sequentially for projects sharing a host, and verify each application's checks and recorded commit before proceeding. Updating pp does not require credential rotation or an infrastructure image upgrade.
+
 ## Server provisioning, occasionally
 
 Ansible is a setup subtask, not part of every deployment. Use the bundled [provisioning playbook](infra/ansible/README.md) when adding a host or deliberately changing its system configuration. It prepares Ubuntu, SSH access, Docker, firewall rules and optional Caddy or storage mounts. Skip provisioning when your host already meets the requirements.

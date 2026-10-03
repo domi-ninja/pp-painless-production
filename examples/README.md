@@ -7,3 +7,7 @@ These examples started from sibling repositories, then replaced project-specific
 - `stateful-go-website/` shows a required secret, persistent volume, migrations, and a custom entrypoint at `stateful.example.com`.
 
 Application source and dependency lockfiles are not duplicated here. No production environment file or secret is included.
+
+Build tags use `${release}` so a new release does not reuse a mutable commit tag. Public smoke checks complement container health checks. Start with `pp plan`, deploy from a reviewed checkout, and compare `pp status` with the intended commit afterward. Preserve the app's existing `.deploy` state and data identifiers when updating it; discard copied state only when creating an independent deployment.
+
+The Convex example uses a narrow function-environment allowlist, private dashboard, and recoverable credential rotation. Read its README before adapting an existing installation; do not copy fresh keys over a running application's environment.
