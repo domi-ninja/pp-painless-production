@@ -41,7 +41,7 @@ func (d Deployer) Deploy() error {
 		return err
 	}
 	defer unlock()
-	plan, err := LoadPlan(d.Root, d.configPath())
+	plan, err := LoadPlanContext(d.Runner.context(), d.Root, d.configPath())
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (d Deployer) Deploy() error {
 		if err != nil {
 			record.Status = "failed"
 			_ = SaveRelease(d.Root, record)
-			return err
+			return fmt.Errorf("%w; migration may have partially changed data; inspect the database and follow its recovery procedure before retrying", err)
 		}
 		migrationRan = true
 		_ = SaveRelease(d.Root, record)
@@ -123,33 +123,24 @@ func (d Deployer) Deploy() error {
 		record.Status = "failed"
 		record.Apply = StepRecord{Status: "failed", Error: err.Error(), At: time.Now().UTC()}
 		_ = SaveRelease(d.Root, record)
-		rollbackErrors := []string{}
+
+		var previous *ReleaseRecord
 		if state.CurrentReleaseID != "" {
-			fmt.Fprintf(d.Err, "apply failed; re-applying previous release %s\n", state.CurrentReleaseID)
-			previous, loadErr := LoadRelease(d.Root, plan.Config.Project, state.CurrentReleaseID)
+			saved, loadErr := LoadRelease(d.Root, plan.Config.Project, state.CurrentReleaseID)
 			if loadErr != nil {
-				rollbackErrors = append(rollbackErrors, loadErr.Error())
-			} else {
-				recovery, recoveryErr := recoveryPlan(d.Root, previous)
-				if recoveryErr != nil {
-					rollbackErrors = append(rollbackErrors, recoveryErr.Error())
-				} else if _, rollbackErr := d.ApplyRelease(recovery, bundleFromRecord(previous)); rollbackErr != nil {
-					rollbackErrors = append(rollbackErrors, rollbackErr.Error())
-				}
+				return fmt.Errorf("%w; load recovery release: %v", err, loadErr)
 			}
+			previous = &saved
 		}
-		if migrationRan {
-			fmt.Fprintln(d.Err, "apply failed after migration; running migration rollback")
-			rollbackRecord, rollbackErr := d.RunMigrationRecord(plan, true)
-			record.Rollback = rollbackRecord
-			_ = SaveRelease(d.Root, record)
-			if rollbackErr != nil {
-				rollbackErrors = append(rollbackErrors, "migration rollback: "+rollbackErr.Error())
-			}
+		rollbackRecord, _, recoveryErr := d.recoverRelease(record, previous, migrationRan)
+		record.Rollback = rollbackRecord
+		if saveErr := SaveRelease(d.Root, record); saveErr != nil {
+			return fmt.Errorf("%w; persist recovery: %v", err, saveErr)
 		}
-		if len(rollbackErrors) > 0 {
-			return fmt.Errorf("%w; rollback also had errors: %s", err, strings.Join(rollbackErrors, "; "))
+		if recoveryErr != nil {
+			return fmt.Errorf("%w; recovery failed: %v", err, recoveryErr)
 		}
+
 		return err
 	}
 
@@ -317,7 +308,7 @@ func (d Deployer) runMigration(migration *Migration, image string, rollback bool
 	}
 	args = append(args, image)
 	args = append(args, command...)
-	ctx, cancel := optionalTimeoutContext(migration.TimeoutSeconds)
+	ctx, cancel := optionalTimeoutContext(d.Runner.context(), migration.TimeoutSeconds)
 	defer cancel()
 	return d.Runner.RunEnvContext(ctx, d.Root, nil, "docker", args...)
 }
@@ -348,7 +339,7 @@ func (d Deployer) ApplyBundle(plan Plan, bundle Bundle) error {
 			return err
 		}
 		fmt.Fprintf(d.Out, "host %s: compose up\n", host.ID)
-		if err := d.ComposeUp(plan, host, nil, false); err != nil {
+		if err := d.ComposeUp(plan, host, nil, true); err != nil {
 			return fmt.Errorf("host %s compose up: %w", host.ID, err)
 		}
 	}
@@ -381,10 +372,10 @@ func (d Deployer) ApplyRelease(plan Plan, bundle Bundle) ([]CheckRecord, error) 
 	if err := d.RunHooks(plan, "after_backend_healthy"); err != nil {
 		return nil, err
 	}
-	if err := d.RunHooks(plan, "after_services_healthy"); err != nil {
+	if err := d.ComposeUpPhase(plan, bundle, nil, true); err != nil {
 		return nil, err
 	}
-	if err := d.ComposeUpPhase(plan, bundle, nil, false); err != nil {
+	if err := d.RunHooks(plan, "after_services_healthy"); err != nil {
 		return nil, err
 	}
 	if err := d.ApplyRoutes(plan, bundle); err != nil {
@@ -480,7 +471,7 @@ func pullHostImagesScript(plan Plan, host HostBundle) string {
 func (d Deployer) ComposeUp(plan Plan, host HostBundle, services []string, wait bool) error {
 	args := []string{"docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " up -d --pull never"}
 	if wait {
-		args[0] += " --wait"
+		args[0] += " --wait --wait-timeout 300"
 	}
 	if len(services) > 0 {
 		args[0] += " " + shellJoin(services)
@@ -513,7 +504,7 @@ func (d Deployer) RunHooks(plan Plan, phase string) error {
 				env["PP_HOST"] = host.SSH
 			}
 		}
-		ctx, cancel := optionalTimeoutContext(hook.TimeoutSeconds)
+		ctx, cancel := optionalTimeoutContext(d.Runner.context(), hook.TimeoutSeconds)
 		err := d.Runner.RunEnvContext(ctx, d.Root, env, hook.Run[0], hook.Run[1:]...)
 		cancel()
 		if err != nil {
@@ -568,23 +559,44 @@ func (d Deployer) RunCheck(plan Plan, group string, check Check) (CheckRecord, e
 }
 
 func (d Deployer) runHTTPCheck(check Check, record *CheckRecord) error {
-	client := http.Client{Timeout: checkTimeout(check.TimeoutSeconds)}
+	ctx, cancel := context.WithTimeout(d.Runner.context(), checkTimeout(check.TimeoutSeconds))
+	defer cancel()
+	client := http.Client{}
 	if !checkFollowsRedirects(check) {
-		client.CheckRedirect = func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
+	attempts := check.Attempts
+	if attempts <= 0 {
+		attempts = 3
+	}
+	var last error
+	for attempt := 0; attempt < attempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, check.URL, nil)
+		if err != nil {
+			return fmt.Errorf("check %s: invalid HTTP request", check.Name)
+		}
+		resp, err := client.Do(req)
+		if err == nil {
+			_ = resp.Body.Close()
+			record.ActualStatus = resp.StatusCode
+			if resp.StatusCode == expectedStatus(check) {
+				return nil
+			}
+			last = fmt.Errorf("check %s: got status %d, want %d", check.Name, resp.StatusCode, expectedStatus(check))
+		} else {
+			last = fmt.Errorf("check %s: HTTP request failed", check.Name)
+		}
+		if attempt+1 < attempts {
+			timer := time.NewTimer(time.Second)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return fmt.Errorf("check %s: %w", check.Name, ctx.Err())
+			case <-timer.C:
+			}
 		}
 	}
-	resp, err := client.Get(check.URL)
-	if err != nil {
-		return fmt.Errorf("check %s: HTTP request failed", check.Name)
-	}
-	_ = resp.Body.Close()
-	record.ActualStatus = resp.StatusCode
-	expected := expectedStatus(check)
-	if resp.StatusCode != expected {
-		return fmt.Errorf("check %s: got status %d, want %d", check.Name, resp.StatusCode, expected)
-	}
-	return nil
+	return last
 }
 
 func (d Deployer) runCommandCheck(check Check) error {
@@ -596,7 +608,7 @@ func (d Deployer) runCommandCheck(check Check) error {
 		}
 		env = values
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), checkTimeout(check.TimeoutSeconds))
+	ctx, cancel := context.WithTimeout(d.Runner.context(), checkTimeout(check.TimeoutSeconds))
 	defer cancel()
 	if err := d.Runner.RunEnvContext(ctx, d.Root, env, check.Command[0], check.Command[1:]...); err != nil {
 		return fmt.Errorf("check %s: %w", check.Name, err)
@@ -636,11 +648,11 @@ func checkTimeout(seconds int) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-func optionalTimeoutContext(seconds int) (context.Context, context.CancelFunc) {
+func optionalTimeoutContext(parent context.Context, seconds int) (context.Context, context.CancelFunc) {
 	if seconds <= 0 {
-		return context.WithCancel(context.Background())
+		seconds = 300
 	}
-	return context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
+	return context.WithTimeout(parent, time.Duration(seconds)*time.Second)
 }
 
 func (d Deployer) UploadHostBundle(host HostBundle, images []ImageBundle) error {
@@ -760,7 +772,7 @@ func (d Deployer) Down() error {
 		return err
 	}
 	defer unlock()
-	plan, err := LoadPlan(d.Root, d.configPath())
+	plan, err := LoadPlanContext(d.Runner.context(), d.Root, d.configPath())
 	if err != nil {
 		return err
 	}
@@ -818,10 +830,7 @@ func (d Deployer) Rollback() error {
 	if err != nil {
 		return err
 	}
-	currentPlan, err := recoveryPlan(d.Root, current)
-	if err != nil {
-		return err
-	}
+
 	if err := d.checkLegacyHosts(recovery); err != nil {
 		return err
 	}
@@ -830,23 +839,18 @@ func (d Deployer) Rollback() error {
 		return err
 	}
 	defer unlockHosts()
-	if currentPlan.Config.Migrations != nil {
-		if !imageIDPattern.MatchString(current.Migration.Image) {
-			return fmt.Errorf("saved migration image is unavailable; database recovery needs manual action")
-		}
-		if _, err := d.Runner.Output(d.Root, "docker", "image", "inspect", current.Migration.Image); err != nil {
-			return fmt.Errorf("saved migration image is unavailable: %w", err)
-		}
-		if err := d.runMigration(currentPlan.Config.Migrations, current.Migration.Image, true); err != nil {
-			return err
-		}
-	}
 
-	bundle := bundleFromRecord(previous)
 	fmt.Fprintf(d.Out, "rolling back to %s\n", previous.ReleaseID)
-	if _, err := d.ApplyRelease(recovery, bundle); err != nil {
+	rollbackRecord, checks, err := d.recoverRelease(current, &previous, current.Migration.Status == "ok")
+	previous.Rollback = rollbackRecord
+	previous.Checks = checks
+	if err != nil {
+		if saveErr := SaveRelease(d.Root, previous); saveErr != nil {
+			return fmt.Errorf("%w; persist recovery: %v", err, saveErr)
+		}
 		return err
 	}
+
 	if err := d.Runner.context().Err(); err != nil {
 		return err
 	}

@@ -26,7 +26,7 @@ func (d Deployer) CheckDomains(plan Plan) {
 	for _, domain := range deploymentDomains(plan) {
 		fmt.Fprintf(d.Out, "dns %s\n", domain)
 
-		ctx, cancel := context.WithTimeout(context.Background(), domainLookupTimeout)
+		ctx, cancel := context.WithTimeout(d.Runner.context(), domainLookupTimeout)
 		addresses, err := resolver.LookupHost(ctx, domain)
 		cancel()
 		if err != nil {

@@ -166,6 +166,7 @@ type Hook struct {
 }
 
 type Check struct {
+	Attempts        int      `yaml:"attempts,omitempty"`
 	Name            string   `yaml:"name"`
 	URL             string   `yaml:"url"`
 	ExpectStatus    int      `yaml:"expect_status"`

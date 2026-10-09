@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -156,4 +157,53 @@ func validateRecoveryArtifact(root, bundle, path string) error {
 		return err
 	}
 	return noSymlinkPath(root, relative)
+}
+
+// Validate the target first. Revert a completed database migration before older
+// code starts; a restore plan or failed revert prevents container recovery.
+func (d Deployer) recoverRelease(current ReleaseRecord, target *ReleaseRecord, revertDatabase bool) (StepRecord, []CheckRecord, error) {
+	step := StepRecord{Status: "running", StartedAt: time.Now().UTC()}
+	var checks []CheckRecord
+	run := func() error {
+		var plan Plan
+		if target != nil {
+			var err error
+			plan, err = recoveryPlan(d.Root, *target)
+			if err != nil {
+				return err
+			}
+		}
+		if revertDatabase {
+			currentPlan, err := recoveryPlan(d.Root, current)
+			if err != nil {
+				return err
+			}
+			migration := currentPlan.Config.Migrations
+			if migration == nil || !imageIDPattern.MatchString(current.Migration.Image) {
+				return fmt.Errorf("no saved database recovery command or image; manual recovery required")
+			}
+			if _, err := d.Runner.Output(d.Root, "docker", "image", "inspect", current.Migration.Image); err != nil {
+				return fmt.Errorf("saved migration image is unavailable: %w", err)
+			}
+			fmt.Fprintln(d.Out, "running saved database rollback before container recovery")
+			if err := d.runMigration(migration, current.Migration.Image, true); err != nil {
+				return err
+			}
+		}
+		if target != nil {
+			var err error
+			checks, err = d.ApplyRelease(plan, bundleFromRecord(*target))
+			return err
+		}
+		return nil
+	}
+	err := run()
+	step.FinishedAt = time.Now().UTC()
+	step.At = step.FinishedAt
+	step.Status = "ok"
+	if err != nil {
+		step.Status = "failed"
+		step.Error = err.Error()
+	}
+	return step, checks, err
 }

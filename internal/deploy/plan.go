@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sort"
@@ -24,6 +25,9 @@ type HostPlan struct {
 }
 
 func LoadPlan(root string, configPath string) (Plan, error) {
+	return LoadPlanContext(context.Background(), root, configPath)
+}
+func LoadPlanContext(ctx context.Context, root string, configPath string) (Plan, error) {
 	cfg, err := LoadConfig(root, configPath)
 	if err != nil {
 		return Plan{}, err
@@ -33,7 +37,7 @@ func LoadPlan(root string, configPath string) (Plan, error) {
 		return Plan{}, err
 	}
 	cfg.Project.resourceID = state.ResourceID
-	git, err := ReadGitMetadata(root)
+	git, err := readGitMetadataContext(ctx, root)
 	if err != nil {
 		return Plan{}, fmt.Errorf("read git metadata: %w", err)
 	}

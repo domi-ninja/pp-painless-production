@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,7 +11,10 @@ import (
 	"git.domi.ninja/domi-ninja/infra-meta-forgejo/internal/deploy"
 )
 
-func Main(name string, args []string, stdout io.Writer, stderr io.Writer) int {
+func Main(name string, args []string, stdout, stderr io.Writer) int {
+	return MainContext(context.Background(), name, args, stdout, stderr)
+}
+func MainContext(ctx context.Context, name string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		args = []string{"deploy"}
 	}
@@ -37,7 +41,7 @@ func Main(name string, args []string, stdout io.Writer, stderr io.Writer) int {
 	case "cleanup":
 		wd, err := os.Getwd()
 		if err == nil {
-			err = configuredDeployer(wd, *configPath, stdout, stderr).Cleanup(dryRun)
+			err = configuredDeployer(ctx, wd, *configPath, stdout, stderr).Cleanup(dryRun)
 		}
 		if err != nil {
 			printError(stderr, err)
@@ -45,17 +49,17 @@ func Main(name string, args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 		return 0
 	case "deploy":
-		return runDeploy(*configPath, stdout, stderr)
+		return runDeploy(ctx, *configPath, stdout, stderr)
 	case "down":
-		return runDown(*configPath, stdout, stderr)
+		return runDown(ctx, *configPath, stdout, stderr)
 	case "init":
-		return runInit(*configPath, stdout, stderr)
+		return runInit(ctx, *configPath, stdout, stderr)
 	case "plan":
-		return runPlan(*configPath, stdout, stderr)
+		return runPlan(ctx, *configPath, stdout, stderr)
 	case "status":
-		return runStatus(*configPath, stdout, stderr)
+		return runStatus(ctx, *configPath, stdout, stderr)
 	case "rollback":
-		return runRollback(*configPath, stdout, stderr)
+		return runRollback(ctx, *configPath, stdout, stderr)
 	case "-h", "--help", "help":
 		printHelp(name, stdout)
 		return 0
@@ -66,33 +70,33 @@ func Main(name string, args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 }
 
-func runDown(configPath string, stdout io.Writer, stderr io.Writer) int {
+func runDown(ctx context.Context, configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := configuredDeployer(wd, configPath, stdout, stderr).Down(); err != nil {
+	if err := configuredDeployer(ctx, wd, configPath, stdout, stderr).Down(); err != nil {
 		printError(stderr, err)
 		return 1
 	}
 	return 0
 }
 
-func runDeploy(configPath string, stdout io.Writer, stderr io.Writer) int {
+func runDeploy(ctx context.Context, configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := configuredDeployer(wd, configPath, stdout, stderr).Deploy(); err != nil {
+	if err := configuredDeployer(ctx, wd, configPath, stdout, stderr).Deploy(); err != nil {
 		printError(stderr, err)
 		return 1
 	}
 	return 0
 }
 
-func runInit(configPath string, stdout io.Writer, stderr io.Writer) int {
+func runInit(ctx context.Context, configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
@@ -110,40 +114,40 @@ func runInit(configPath string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func runStatus(configPath string, stdout io.Writer, stderr io.Writer) int {
+func runStatus(ctx context.Context, configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := configuredDeployer(wd, configPath, stdout, stderr).Status(); err != nil {
+	if err := configuredDeployer(ctx, wd, configPath, stdout, stderr).Status(); err != nil {
 		printError(stderr, err)
 		return 1
 	}
 	return 0
 }
 
-func runRollback(configPath string, stdout io.Writer, stderr io.Writer) int {
+func runRollback(ctx context.Context, configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := configuredDeployer(wd, configPath, stdout, stderr).Rollback(); err != nil {
+	if err := configuredDeployer(ctx, wd, configPath, stdout, stderr).Rollback(); err != nil {
 		printError(stderr, err)
 		return 1
 	}
 	return 0
 }
 
-func runPlan(configPath string, stdout io.Writer, stderr io.Writer) int {
+func runPlan(ctx context.Context, configPath string, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
 
-	plan, err := deploy.LoadPlan(wd, configPath)
+	plan, err := deploy.LoadPlanContext(ctx, wd, configPath)
 	if err != nil {
 		var validationErr deploy.ValidationError
 		if errors.As(err, &validationErr) {
@@ -181,8 +185,9 @@ func printHelp(name string, w io.Writer) {
 	fmt.Fprintln(w, "  cleanup   remove expired releases and owned images (--dry-run to preview)")
 }
 
-func configuredDeployer(root, configPath string, stdout, stderr io.Writer) deploy.Deployer {
+func configuredDeployer(ctx context.Context, root, configPath string, stdout, stderr io.Writer) deploy.Deployer {
 	deployer := deploy.NewDeployer(root, stdout, stderr)
 	deployer.ConfigPath = configPath
+	deployer.Runner.Context = ctx
 	return deployer
 }

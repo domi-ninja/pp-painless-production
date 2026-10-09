@@ -124,3 +124,11 @@ does not rewrite it; the next save records the current location.
 Each new release contains a private `recovery.json` and, when needed, a selected `migration.env`. Rollback uses saved hosts, phases, HTTP checks and migration inputs. It needs the original Compose files, service env files and image archives. Keep the whole release directory when moving a checkout.
 
 Rollback reads deployment identity without requiring today's env files or build inputs. It never runs today's application hooks or command checks against yesterday's containers. A release that uses those scripts requires explicit application recovery. A legacy release without a saved migration contract also requires manual database recovery. Container rollback cannot undo a Convex schema push or restore a database backup.
+
+## Readiness and database recovery
+
+Compose waits up to 300 seconds for services to run and for configured health checks to pass. `after_services_healthy` runs after that wait. HTTP smoke checks make up to three attempts within their timeout, with one second between attempts. Set `attempts: 1` for a single request. Command checks run once.
+
+Hooks and migrations default to a 300 second timeout. Set `timeout_seconds` to allow longer work. Interrupting pp cancels subprocesses, HTTP requests and DNS lookups. Cancellation does not prove that a migration stopped before changing data.
+
+After a completed migration and failed apply, pp runs the saved database rollback command before starting older containers. A failed database revert stops container recovery. A `restore_plan` always needs manual action. A failed forward migration may have changed data partially; pp reports that condition and does not guess how to undo it. Your migration and rollback commands must handle transactions and compatibility with services that are already running.

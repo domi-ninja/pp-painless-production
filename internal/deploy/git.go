@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os/exec"
@@ -17,21 +18,25 @@ type GitMetadata struct {
 }
 
 func ReadGitMetadata(root string) (GitMetadata, error) {
-	sha, err := gitOutput(root, "rev-parse", "HEAD")
+	return readGitMetadataContext(context.Background(), root)
+}
+
+func readGitMetadataContext(ctx context.Context, root string) (GitMetadata, error) {
+	sha, err := gitOutputContext(ctx, root, "rev-parse", "HEAD")
 	if err != nil {
 		return GitMetadata{}, err
 	}
-	shortSHA, err := gitOutput(root, "rev-parse", "--short=7", "HEAD")
+	shortSHA, err := gitOutputContext(ctx, root, "rev-parse", "--short=7", "HEAD")
 	if err != nil {
 		return GitMetadata{}, err
 	}
 
-	status, err := gitOutput(root, "status", "--porcelain")
+	status, err := gitOutputContext(ctx, root, "status", "--porcelain")
 	if err != nil {
 		return GitMetadata{}, err
 	}
 
-	diff, err := gitOutput(root, "diff", "HEAD")
+	diff, err := gitOutputContext(ctx, root, "diff", "HEAD")
 	if err != nil {
 		return GitMetadata{}, err
 	}
@@ -50,8 +55,11 @@ func ReleaseID(now time.Time, shortSHA string) string {
 }
 
 func gitOutput(root string, args ...string) (string, error) {
+	return gitOutputContext(context.Background(), root, args...)
+}
+func gitOutputContext(ctx context.Context, root string, args ...string) (string, error) {
 	gitArgs := append([]string{"-c", "safe.directory=" + root}, args...)
-	cmd := exec.Command("git", gitArgs...)
+	cmd := exec.CommandContext(ctx, "git", gitArgs...)
 	cmd.Dir = root
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
