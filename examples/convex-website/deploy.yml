@@ -5,7 +5,7 @@ project:
   environment: prod
 
 env:
-  source: .env.local
+  source: .env.prod
   required:
     - VITE_CONVEX_URL
     - SITE_URL
@@ -18,6 +18,8 @@ env:
     - POSTGRES_URL
     - MINIO_ROOT_USER
     - MINIO_ROOT_PASSWORD
+    - STORAGE_ACCESS_KEY
+    - STORAGE_SECRET_KEY
     - S3_STORAGE_EXPORTS_BUCKET
     - S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
     - S3_STORAGE_MODULES_BUCKET
@@ -51,7 +53,7 @@ services:
     phase: infra
     hosts: [server]
     env:
-      source: .env.local
+      source: .env.prod
       required:
         - POSTGRES_DB
         - POSTGRES_USER
@@ -61,7 +63,7 @@ services:
       POSTGRES_USER: ${env.POSTGRES_USER}
       POSTGRES_PASSWORD: ${env.POSTGRES_PASSWORD}
     volumes:
-      - source: /data/pp/convex-website/postgres
+      - source: /data/pp/${project}/${environment}/postgres
         target: /var/lib/postgresql/data
         type: bind
     health:
@@ -76,7 +78,7 @@ services:
     hosts: [server]
     command: ["server", "/data", "--console-address", ":9001"]
     env:
-      source: .env.local
+      source: .env.prod
       required:
         - MINIO_ROOT_USER
         - MINIO_ROOT_PASSWORD
@@ -84,7 +86,7 @@ services:
       MINIO_ROOT_USER: ${env.MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${env.MINIO_ROOT_PASSWORD}
     volumes:
-      - source: /data/pp/convex-website/s3
+      - source: /data/pp/${project}/${environment}/s3
         target: /data
         type: bind
 
@@ -94,13 +96,13 @@ services:
     phase: backend
     hosts: [server]
     env:
-      source: .env.local
+      source: .env.prod
       required:
         - INSTANCE_NAME
         - INSTANCE_SECRET
         - POSTGRES_URL
-        - MINIO_ROOT_USER
-        - MINIO_ROOT_PASSWORD
+        - STORAGE_ACCESS_KEY
+        - STORAGE_SECRET_KEY
         - S3_STORAGE_EXPORTS_BUCKET
         - S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
         - S3_STORAGE_MODULES_BUCKET
@@ -115,8 +117,8 @@ services:
       DO_NOT_REQUIRE_SSL: "1"
       RUST_LOG: info
       AWS_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: ${env.MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${env.MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${env.STORAGE_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${env.STORAGE_SECRET_KEY}
       AWS_S3_FORCE_PATH_STYLE: "true"
       AWS_S3_DISABLE_SSE: "true"
       S3_ENDPOINT_URL: http://s3:9000
@@ -126,7 +128,7 @@ services:
       S3_STORAGE_FILES_BUCKET: ${env.S3_STORAGE_FILES_BUCKET}
       S3_STORAGE_SEARCH_BUCKET: ${env.S3_STORAGE_SEARCH_BUCKET}
     ports:
-      - published: auto
+      - published: 13210
         target: 3210
       - published: auto
         target: 3211
@@ -140,19 +142,16 @@ services:
     phase: backend
     hosts: [server]
     environment:
-      PORT: "3211"
-      CONVEX_CLOUD_ORIGIN: ${env.CONVEX_SELF_HOSTED_URL}
-      NEXT_PUBLIC_DEPLOYMENT_URL: ${env.CONVEX_SELF_HOSTED_URL}
-      CONVEX_SITE_ORIGIN: ${env.CONVEX_SELF_HOSTED_URL}
+      NEXT_PUBLIC_DEPLOYMENT_URL: http://127.0.0.1:13210
     ports:
-      - published: auto
-        target: 3211
+      - published: 13211
+        target: 6791
     health:
       command:
         [
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3211/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:6791/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       timeout_seconds: 90
 
@@ -173,36 +172,43 @@ route_files:
     host: server
 
 hooks:
-  after_backend_healthy:
+  after_infra_healthy:
     - name: ensure minio buckets
+      timeout_seconds: 300
       run: ["bash", "scripts/ensure-minio-buckets.sh"]
       env:
-        source: .env.local
+        source: .env.prod
         required:
+          - STORAGE_ACCESS_KEY
+          - STORAGE_SECRET_KEY
           - S3_STORAGE_EXPORTS_BUCKET
           - S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
           - S3_STORAGE_MODULES_BUCKET
           - S3_STORAGE_FILES_BUCKET
           - S3_STORAGE_SEARCH_BUCKET
+  after_backend_healthy:
     - name: refresh convex admin key
+      timeout_seconds: 120
       run: ["bash", "scripts/refresh-convex-admin-key.sh"]
       env:
-        source: .env.local
+        source: .env.prod
         required:
           - CONVEX_SELF_HOSTED_URL
     - name: push convex env
+      timeout_seconds: 300
       run: ["bash", "scripts/push-env-to-convex.sh"]
       env:
-        source: .env.local
+        source: .env.prod
         required:
           - CONVEX_SELF_HOSTED_URL
           - SITE_URL
           - JWT_PRIVATE_KEY
           - JWKS
     - name: sync convex functions
-      run: ["npx", "convex", "dev", "--once", "--env-file", ".env.local"]
+      timeout_seconds: 300
+      run: ["bash", "scripts/deploy-convex.sh"]
       env:
-        source: .env.local
+        source: .env.prod
         required:
           - CONVEX_SELF_HOSTED_URL
 

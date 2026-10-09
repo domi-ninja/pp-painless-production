@@ -1,45 +1,7 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-.env.local.*
-.env.prod
+node_modules/
+dist/
 .deploy/
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Ignored for the template, you probably want to remove it:
-package-lock.json
-
-# domi.ninja-convex-vite specific
-site-config.generated.json
-convex-exports.json
-convex-overview.json
-.eslintcache
-.claude
-.cursor
-convex-overview.cjs
-CLAUDE.md
-GEMINI.md
-.claude-docker
-Dockerfile.claude-code
-run-claude-code.sh
-.env.local.back
+.env
+.env.*
+!.env.prod.example
+*.log

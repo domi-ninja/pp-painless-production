@@ -427,7 +427,7 @@ func ValidateConfig(root string, cfg Config) error {
 		validateMigration(&problems, root, *cfg.Migrations)
 	}
 	for phase, hooks := range cfg.Hooks {
-		if phase != "after_backend_healthy" && phase != "after_services_healthy" {
+		if phase != "after_infra_healthy" && phase != "after_backend_healthy" && phase != "after_services_healthy" {
 			problems = append(problems, "unsupported hook phase "+phase)
 		}
 		for i, hook := range hooks {

@@ -14,7 +14,7 @@ func TestExamplesValidate(t *testing.T) {
 			if err := os.CopyFS(root, os.DirFS(source)); err != nil {
 				t.Fatal(err)
 			}
-			for _, pair := range [][2]string{{".env.example", ".env"}, {".env.local.example", ".env.local"}} {
+			for _, pair := range [][2]string{{".env.example", ".env"}, {".env.prod.example", ".env.prod"}} {
 				body, err := os.ReadFile(filepath.Join(root, pair[0]))
 				if os.IsNotExist(err) {
 					continue

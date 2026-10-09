@@ -393,6 +393,9 @@ func (d Deployer) ApplyRelease(plan Plan, bundle Bundle) ([]CheckRecord, error) 
 	if err := d.ComposeUpPhase(plan, bundle, []string{"infra"}, true); err != nil {
 		return nil, err
 	}
+	if err := d.RunHooks(plan, "after_infra_healthy"); err != nil {
+		return nil, err
+	}
 	if err := d.ComposeUpPhase(plan, bundle, []string{"backend"}, true); err != nil {
 		return nil, err
 	}
