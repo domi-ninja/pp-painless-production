@@ -6,12 +6,8 @@
       - ansible_distribution_major_version | int >= 22
     fail_msg: "This playbook is intended for Ubuntu 22.04 or newer."
 
-- name: Refuse to disable SSH passwords without an admin SSH key
-  ansible.builtin.assert:
-    that:
-      - admin_ssh_public_keys | length > 0
-    fail_msg: "Set admin_ssh_public_keys before disabling SSH password authentication."
-  when: not ssh_password_authentication | bool
+- name: Validate admin access before changing the host
+  ansible.builtin.include_tasks: validate-access.yml
 
 - name: Update apt cache
   ansible.builtin.apt:
@@ -92,23 +88,13 @@
     group: "{{ admin_user }}"
     mode: "0700"
 
-- name: Create admin authorized_keys file
-  ansible.builtin.file:
-    path: "/home/{{ admin_user }}/.ssh/authorized_keys"
-    state: touch
+- name: Replace the declared admin SSH key set
+  ansible.builtin.copy:
+    dest: "/home/{{ admin_user }}/.ssh/authorized_keys"
+    content: "{{ admin_ssh_public_keys | join('\n') }}\n"
     owner: "{{ admin_user }}"
     group: "{{ admin_user }}"
     mode: "0600"
-
-- name: Install admin SSH authorized keys
-  ansible.builtin.lineinfile:
-    path: "/home/{{ admin_user }}/.ssh/authorized_keys"
-    line: "{{ item }}"
-    state: present
-    owner: "{{ admin_user }}"
-    group: "{{ admin_user }}"
-    mode: "0600"
-  loop: "{{ admin_ssh_public_keys }}"
 
 - name: Allow passwordless sudo for admin user
   ansible.builtin.copy:
@@ -119,14 +105,8 @@
     mode: "0440"
     validate: "visudo -cf %s"
 
-- name: Install SSH hardening config
-  ansible.builtin.template:
-    src: sshd-hardening.conf.j2
-    dest: /etc/ssh/sshd_config.d/99-prod-hardening.conf
-    owner: root
-    group: root
-    mode: "0644"
-  notify: reload sshd
+- name: Configure and verify SSH access
+  ansible.builtin.include_tasks: configure-ssh.yml
 
 - name: Install unattended-upgrades auto config
   ansible.builtin.template:
@@ -247,17 +227,29 @@
     state: present
   when: swap_file_size_mb | int > 0
 
-- name: Allow configured TCP ports through UFW
-  ansible.builtin.command: "ufw allow {{ item }}/tcp"
-  register: ufw_tcp_result
-  changed_when: "'Rules updated' in ufw_tcp_result.stdout"
-  loop: "{{ ufw_allowed_tcp_ports }}"
+- name: Create pp system helper directory
+  ansible.builtin.file:
+    path: /usr/local/lib/pp
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-- name: Allow configured UDP ports through UFW
-  ansible.builtin.command: "ufw allow {{ item }}/udp"
-  register: ufw_udp_result
-  changed_when: "'Rules updated' in ufw_udp_result.stdout"
-  loop: "{{ ufw_allowed_udp_ports }}"
+- name: Install firewall reconciliation helper
+  ansible.builtin.copy:
+    src: reconcile-firewall.py
+    dest: /usr/local/lib/pp/reconcile-firewall.py
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Reconcile managed firewall rules without closing the active SSH port
+  ansible.builtin.command:
+    argv: "{{ ['/usr/local/lib/pp/reconcile-firewall.py'] + (ansible_check_mode | ternary(['--check'], [])) }}"
+    stdin: "{{ {'tcp': ufw_allowed_tcp_ports + [ssh_port, ansible_port | default(22)], 'udp': ufw_allowed_udp_ports} | to_json }}"
+  register: pp_firewall_result
+  changed_when: "'changed' == pp_firewall_result.stdout"
+  check_mode: false
 
 - name: Enable UFW
   ansible.builtin.command: ufw --force enable

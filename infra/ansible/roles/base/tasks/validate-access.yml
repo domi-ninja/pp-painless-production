@@ -1,0 +1,32 @@
+---
+- name: Require usable admin keys before disabling SSH passwords
+  ansible.builtin.assert:
+    that:
+      - ssh_password_authentication | bool or admin_ssh_public_keys | length > 0
+      - ssh_port | int >= 1
+      - ssh_port | int <= 65535
+    fail_msg: "Set admin_ssh_public_keys to real public keys and choose a valid SSH port."
+
+- name: Reject placeholders and multiline public keys
+  ansible.builtin.assert:
+    that:
+      - item is match('^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com) [A-Za-z0-9+/]+=*( [^\r\n]*)?$')
+      - "'REPLACE_' not in item"
+    fail_msg: "admin_ssh_public_keys must contain one complete public key per entry."
+  loop: "{{ admin_ssh_public_keys }}"
+
+- name: Verify each public key with ssh-keygen
+  ansible.builtin.command:
+    argv: [ssh-keygen, -l, -f, /dev/stdin]
+    stdin: "{{ item }}"
+  loop: "{{ admin_ssh_public_keys }}"
+  changed_when: false
+  check_mode: false
+  register: admin_key_checks
+
+- name: Reject small RSA keys
+  ansible.builtin.assert:
+    that:
+      - not item.item.startswith('ssh-rsa ') or item.stdout.split()[0] | int >= 2048
+    fail_msg: "RSA public keys must have at least 2048 bits. Prefer Ed25519."
+  loop: "{{ admin_key_checks.results }}"

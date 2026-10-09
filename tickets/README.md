@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [021 - reconcile ssh and firewall ](021-reconcile-ssh-and-firewall.md)
 - [022 - make storage changes recoverable ](022-make-storage-changes-recoverable.md)
 - [023 - reject unsupported config ](023-reject-unsupported-config.md)
 - [024 - render volumes and builds ](024-render-volumes-and-builds.md)
@@ -31,6 +30,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [Completed 019](done/019-reconcile-routes-and-services.md)
 
 - [Completed 020](done/020-complete-host-permissions.md)
+
+- [Completed 021](done/021-reconcile-ssh-and-firewall.md)
 
 ## Earlier work
 

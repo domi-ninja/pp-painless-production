@@ -40,3 +40,11 @@ The retained Coolify role is for legacy hosts. Leave it disabled for new pp setu
 ## Existing Git-host configuration
 
 Forgejo, Forgejo runner, Woodpecker and runner-isolation roles moved to the sibling `git-host-ansible` repository. Shared baseline roles were copied so both repos work independently. Existing ignored inventory and credential files were left untouched; they were not pushed to either repository. Move the relevant host settings into the new repo before using its playbooks, and never provision an existing server with placeholder secrets.
+
+## SSH keys and firewall changes
+
+The playbook owns the admin account's complete `authorized_keys` file. Removing a key from `admin_ssh_public_keys` revokes it on the next run. It rejects placeholders, invalid keys and RSA keys smaller than 2048 bits before changing the host. Keep a bootstrap connection open while testing new access.
+
+The managed SSH fragment loads before cloud defaults. The playbook checks `sshd -T` for the admin account and root before reloading, and restores its previous fragments if verification fails. A setting before the `Include` line or a matching `Match` block can still override it; the effective-setting check will fail.
+
+UFW rules carry a `pp-managed` comment. The playbook adds the desired rules first, then removes obsolete rules with that comment. It keeps both the configured SSH port and the current inventory connection port open. Switch the inventory to the new port after verifying access, then rerun to retire the old port. Existing rules without that comment remain under operator control; inspect and remove obsolete unmarked rules when adopting an existing host. Docker-published ports can bypass UFW, so bind application ports to loopback.

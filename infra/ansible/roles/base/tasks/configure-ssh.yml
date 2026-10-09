@@ -1,0 +1,82 @@
+---
+- name: Read previous managed SSH fragments
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/ssh/sshd_config.d/00-pp-hardening.conf
+    - /etc/ssh/sshd_config.d/99-prod-hardening.conf
+  register: previous_ssh_paths
+
+- name: Save previous managed SSH fragment contents
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop: "{{ previous_ssh_paths.results }}"
+  when: item.stat.exists
+  register: previous_ssh_contents
+
+- name: Install and verify managed SSH settings
+  block:
+    - name: Install SSH hardening before cloud defaults
+      ansible.builtin.template:
+        src: sshd-hardening.conf.j2
+        dest: /etc/ssh/sshd_config.d/00-pp-hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload sshd
+
+    - name: Remove the former late SSH fragment
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d/99-prod-hardening.conf
+        state: absent
+      notify: reload sshd
+
+    - name: Validate SSH configuration syntax
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+      check_mode: false
+
+    - name: Read effective SSH settings for admin and root
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/sshd
+          - -T
+          - -C
+          - "user={{ item }},host={{ inventory_hostname }},addr={{ ansible_host | default('127.0.0.1') }}"
+      loop: ["{{ admin_user }}", root]
+      register: effective_ssh
+      changed_when: false
+      check_mode: false
+
+    - name: Require the intended effective SSH settings
+      ansible.builtin.assert:
+        that:
+          - "('passwordauthentication ' ~ (ssh_password_authentication | bool | ternary('yes', 'no'))) in item.stdout_lines"
+          - "('permitrootlogin ' ~ ssh_permit_root_login) in item.stdout_lines"
+          - "'kbdinteractiveauthentication no' in item.stdout_lines"
+          - "('port ' ~ ssh_port | string) in item.stdout_lines"
+          - "item.stdout_lines | select('match', '^port ') | list | length == 1"
+        fail_msg: "Another SSH setting overrides the managed fragment. Fix its ordering before reloading SSH."
+      loop: "{{ effective_ssh.results }}"
+      when: not ansible_check_mode
+  rescue:
+    - name: Restore previous SSH fragments
+      ansible.builtin.copy:
+        dest: "{{ item.item.item }}"
+        content: "{{ item.content | b64decode }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ previous_ssh_contents.results }}"
+      when: not (item.skipped | default(false))
+
+    - name: Remove newly introduced SSH fragments
+      ansible.builtin.file:
+        path: "{{ item.item }}"
+        state: absent
+      loop: "{{ previous_ssh_paths.results }}"
+      when: not item.stat.exists
+
+    - name: Stop provisioning after restoring SSH configuration
+      ansible.builtin.fail:
+        msg: "SSH validation failed. Previous managed fragments were restored; SSH was not reloaded."
