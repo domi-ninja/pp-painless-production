@@ -36,6 +36,9 @@ func TestConfigFlagSelectsEnvironmentState(t *testing.T) {
 	if err := os.WriteFile(path, bytes.ReplaceAll(body, []byte("environment: prod"), []byte("environment: dev")), 0644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte("FROM scratch\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	cfg, err := deploy.LoadConfig(root, "deploy.dev.yml")
 	if err != nil {
 		t.Fatal(err)

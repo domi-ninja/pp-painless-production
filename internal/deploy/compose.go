@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -305,7 +306,7 @@ func routeTarget(plan Plan, hostID string, route Route) (string, error) {
 	if hostIP == "" {
 		hostIP = "127.0.0.1"
 	}
-	return "http://" + hostIP + ":" + strconv.Itoa(published), nil
+	return "http://" + net.JoinHostPort(hostIP, strconv.Itoa(published)), nil
 }
 
 func selectRoutePort(service Service, targetPort int) (Port, bool) {
@@ -410,12 +411,11 @@ func renderPorts(plan Plan, hostID string, serviceID string, ports []Port) []str
 			}
 			published = allocated
 		}
-		value := strconv.Itoa(published) + ":" + strconv.Itoa(port.Target)
-		if port.HostIP != "" {
-			value = port.HostIP + ":" + value
-		} else {
-			value = "127.0.0.1:" + value
+		hostIP := port.HostIP
+		if hostIP == "" {
+			hostIP = "127.0.0.1"
 		}
+		value := net.JoinHostPort(hostIP, strconv.Itoa(published)) + ":" + strconv.Itoa(port.Target)
 		out = append(out, value)
 	}
 	return out

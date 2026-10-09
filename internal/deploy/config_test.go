@@ -11,6 +11,7 @@ func TestValidateConfigAcceptsValidConfig(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, ".env.prod", "DATABASE_URL=postgres://example\nSESSION_SECRET=secret\nQUEUE_URL=redis://example\n")
 
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	cfg := validConfig()
 	if err := ValidateConfig(root, cfg); err != nil {
 		t.Fatalf("expected valid config, got %v", err)
@@ -21,6 +22,7 @@ func TestValidateConfigRejectsUnknownHostAndPortConflict(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, ".env.prod", "DATABASE_URL=postgres://example\nSESSION_SECRET=secret\nQUEUE_URL=redis://example\n")
 
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	cfg := validConfig()
 	web := cfg.Services["web"]
 	web.Hosts = []string{"app-01", "missing"}
@@ -47,6 +49,7 @@ func TestValidateConfigRequiresMigrationRollback(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, ".env.prod", "DATABASE_URL=postgres://example\nSESSION_SECRET=secret\nQUEUE_URL=redis://example\n")
 
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	cfg := validConfig()
 	cfg.Migrations.RollbackCommand = nil
 	cfg.Migrations.RestorePlan = ""
@@ -64,6 +67,7 @@ func TestValidateConfigRejectsInvalidRoute(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, ".env.prod", "DATABASE_URL=postgres://example\nSESSION_SECRET=secret\nQUEUE_URL=redis://example\n")
 
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	cfg := validConfig()
 	cfg.Routes = []Route{{
 		Host:    "quotes.example.com",

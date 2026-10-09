@@ -177,6 +177,7 @@ func TestConcurrentLegacyMigration(t *testing.T) {
 
 func TestAdoptedDeployAndRollbackKeepResourceIdentity(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	project := legacyFixture(t, root)
 	cfg := Config{
 		Version: 1, Project: project, Build: Build{Context: ".", Dockerfile: "Dockerfile"},
@@ -240,6 +241,7 @@ exit 0
 
 func TestConfigDefaultsToV1WithoutRewriting(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	writeFile(t, root, ".env.prod", "DATABASE_URL=example\nSESSION_SECRET=example\nQUEUE_URL=example\n")
 	path := filepath.Join(root, "deploy.yml")
 	if err := writeYAML(path, validConfig()); err != nil {

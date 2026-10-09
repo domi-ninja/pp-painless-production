@@ -31,6 +31,7 @@ func TestServiceEnvOnlyIncludesDeclaredKeys(t *testing.T) {
 		})
 	}
 	writeFile(t, root, ".env.prod", "DATABASE_URL=test\nSESSION_SECRET=test\nQUEUE_URL=test\n")
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	cfg := validConfig()
 	web := cfg.Services["web"]
 	web.Env.Required = nil

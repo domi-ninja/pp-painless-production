@@ -144,3 +144,11 @@ Status needs deployment identity and local records, not current env files, build
 pp stages the full shared Caddy configuration and validates it before replacing its own route file. A failed reload restores the old file and reloads the restored configuration. Caddy validation also rejects ambiguous site definitions. Keep the host's `import /etc/pp/proxy/routes/*.caddy` on its own line; use absolute paths for other imports.
 
 The final Compose apply removes retired services from the same deployment. It preserves data volumes. Removing a route removes it from that deployment's route file. Removing a host while it still has owned containers fails before building or migrating. Run `pp down` using that deployment's saved state first. Down reads saved hosts, removes owned containers and removes its routes; it does not delete volumes.
+
+## Configuration validation
+
+Unknown YAML fields, including nested fields, fail validation. pp supports service phases `infra`, `backend` and `frontend`, plus an omitted phase for the final apply. Supported hooks are `after_backend_healthy` and `after_services_healthy`. The only check group is `smoke`.
+
+Build contexts must be existing directories and Dockerfiles must be regular files inside the app repository. Each build supports one platform, `linux/amd64` or `linux/arm64`, because pp loads and transfers local images. Ports must be between 1 and 65535, and `host_ip` must be an IP address. Required env values must exist and be nonempty. Timeouts accept 0 for the default or 1 to 86400 seconds.
+
+Host roles are descriptive labels. They do not grant permissions or enforce network policy. pp rejects CI and Git-hosting placement labels and checks the host's CI marker before deployment; run those services on separate hosts.

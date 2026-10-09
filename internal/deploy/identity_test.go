@@ -25,6 +25,7 @@ func TestEnvironmentBundlesAndStateAreIndependent(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, ".env.prod", "DATABASE_URL=example\nSESSION_SECRET=example\nQUEUE_URL=example\n")
 	for _, environment := range []string{"dev", "prod"} {
+		writeFile(t, root, "Dockerfile", "FROM scratch\n")
 		cfg := validConfig()
 		cfg.Project.Environment = environment
 		plan := BuildPlan(cfg, GitMetadata{SHA: "abcdef123", ShortSHA: "abcdef1"}, time.Unix(100, 0))
@@ -190,6 +191,7 @@ func TestLegacyHostPreflight(t *testing.T) {
 func TestRollbackRejectsOtherEnvironmentBeforeRunningCommands(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, ".env.prod", "DATABASE_URL=example\nSESSION_SECRET=example\nQUEUE_URL=example\n")
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	cfg := validConfig()
 	cfg.Project.Environment = "dev"
 	if err := writeYAML(filepath.Join(root, "deploy.dev.yml"), cfg); err != nil {

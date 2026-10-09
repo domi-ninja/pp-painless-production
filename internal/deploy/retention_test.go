@@ -262,6 +262,7 @@ esac
 
 func TestAutomaticRetentionAfterSuccessfulAndFailedDeploys(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PATH", root+":"+os.Getenv("PATH"))
 	failed := filepath.Join(root, "fail-build")

@@ -1,7 +1,10 @@
 package deploy
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -214,10 +217,16 @@ func LoadConfig(root string, configPath string) (Config, error) {
 	}
 
 	cfg := Config{Version: CurrentConfigVersion}
-	if err := yaml.Unmarshal(body, &cfg); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(body))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cfg); err != nil {
 		return Config{}, fmt.Errorf("parse %s: %w", configPath, err)
 	}
 
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return Config{}, fmt.Errorf("%s must contain one YAML document", configPath)
+	}
 	if err := ValidateConfig(root, cfg); err != nil {
 		return Config{}, err
 	}
@@ -240,6 +249,7 @@ func ValidateConfig(root string, cfg Config) error {
 	if len(cfg.Builds) == 0 {
 		require(&problems, "build.context", cfg.Build.Context)
 		require(&problems, "build.dockerfile", cfg.Build.Dockerfile)
+		validateBuild(&problems, "build", cfg.Build)
 		validateBuildPaths(&problems, root, "build", cfg.Build)
 	} else {
 		for _, item := range sortedMap(cfg.Builds) {
@@ -262,6 +272,12 @@ func ValidateConfig(root string, cfg Config) error {
 		host := item.Value
 		validateSlug(&problems, "hosts."+hostID, hostID)
 		require(&problems, "hosts."+hostID+".ssh", host.SSH)
+		for _, role := range host.Roles {
+			validateSlug(&problems, "hosts."+hostID+".roles", role)
+			if role == "ci" || role == "runner" || role == "forgejo" || role == "woodpecker" {
+				problems = append(problems, "hosts."+hostID+".roles cannot place Git hosting or CI on an application host")
+			}
+		}
 		if err := validateSSHTarget(host.SSH); err != nil {
 			problems = append(problems, "hosts."+hostID+".ssh: "+err.Error())
 		}
@@ -282,7 +298,9 @@ func ValidateConfig(root string, cfg Config) error {
 			problems = append(problems, "services."+serviceID+".pull must be if_missing, always, or never")
 		}
 		if service.Phase != "" {
-			validateSlug(&problems, "services."+serviceID+".phase", service.Phase)
+			if service.Phase != "infra" && service.Phase != "backend" && service.Phase != "frontend" {
+				problems = append(problems, "services."+serviceID+".phase must be infra, backend, or frontend")
+			}
 		}
 		if len(service.Hosts) == 0 {
 			problems = append(problems, "services."+serviceID+".hosts must contain at least one host")
@@ -296,9 +314,12 @@ func ValidateConfig(root string, cfg Config) error {
 				hostPorts[hostID] = map[int]string{}
 			}
 			for _, port := range service.Ports {
-				if (!port.Published.Auto && port.Published.Value <= 0) || port.Target <= 0 {
-					problems = append(problems, "services."+serviceID+".ports must use positive published and target ports, or published: auto")
+				if (!port.Published.Auto && (port.Published.Value <= 0 || port.Published.Value > 65535)) || port.Target <= 0 || port.Target > 65535 {
+					problems = append(problems, "services."+serviceID+".ports must use ports between 1 and 65535, or published: auto")
 					continue
+				}
+				if port.HostIP != "" && net.ParseIP(port.HostIP) == nil {
+					problems = append(problems, "services."+serviceID+".ports.host_ip must be an IP address")
 				}
 				if port.Published.Auto {
 					continue
@@ -313,7 +334,19 @@ func ValidateConfig(root string, cfg Config) error {
 		if service.Env.Source != "" && len(service.Env.Required) == 0 && !service.Env.IncludeAll {
 			problems = append(problems, "services."+serviceID+".env.required must list injected keys, or set include_all: true explicitly")
 		}
-		validateHealth(&problems, "services."+serviceID+".health", service.Health, len(service.Ports) > 0)
+		reachable := len(service.Ports) > 0
+		for _, route := range cfg.Routes {
+			if route.Service == serviceID {
+				reachable = true
+			}
+		}
+		validateHealth(&problems, "services."+serviceID+".health", service.Health, reachable)
+		for key := range service.Environment {
+			validateEnvName(&problems, "services."+serviceID+".environment", key)
+		}
+		for key := range service.CommandEnv {
+			validateEnvName(&problems, "services."+serviceID+".command_env", key)
+		}
 		for _, mount := range service.Volumes {
 			if mount.Target == "" {
 				problems = append(problems, "services."+serviceID+".volumes.target is required")
@@ -355,6 +388,9 @@ func ValidateConfig(root string, cfg Config) error {
 			}
 		}
 		if route.HostID != "" {
+			if service, ok := cfg.Services[route.Service]; ok && !contains(service.Hosts, route.HostID) {
+				problems = append(problems, field+".host_id must host the route service")
+			}
 			if _, ok := cfg.Hosts[route.HostID]; !ok {
 				problems = append(problems, field+".host_id references unknown host "+route.HostID)
 			}
@@ -389,13 +425,17 @@ func ValidateConfig(root string, cfg Config) error {
 		validateMigration(&problems, root, *cfg.Migrations)
 	}
 	for phase, hooks := range cfg.Hooks {
-		validateHookPhase(&problems, "hooks."+phase, phase)
+		if phase != "after_backend_healthy" && phase != "after_services_healthy" {
+			problems = append(problems, "unsupported hook phase "+phase)
+		}
 		for i, hook := range hooks {
 			validateHook(&problems, root, fmt.Sprintf("hooks.%s[%d]", phase, i), hook)
 		}
 	}
 	for group, checks := range cfg.Checks {
-		validateHookPhase(&problems, "checks."+group, group)
+		if group != "smoke" {
+			problems = append(problems, "unsupported check group "+group)
+		}
 		for i, check := range checks {
 			validateCheck(&problems, root, fmt.Sprintf("checks.%s[%d]", group, i), check)
 		}
@@ -408,6 +448,14 @@ func ValidateConfig(root string, cfg Config) error {
 }
 
 func validateBuild(problems *[]string, field string, build Build) {
+	if len(build.Platforms) > 1 {
+		*problems = append(*problems, field+".platforms supports only one platform with --load")
+	}
+	for _, platform := range build.Platforms {
+		if platform != "linux/amd64" && platform != "linux/arm64" {
+			*problems = append(*problems, field+".platforms supports linux/amd64 or linux/arm64")
+		}
+	}
 	require(problems, field+".context", build.Context)
 	require(problems, field+".dockerfile", build.Dockerfile)
 	for key := range build.Args {
@@ -421,11 +469,21 @@ func validateBuildPaths(problems *[]string, root, field string, build Build) {
 	for name, path := range map[string]string{"context": build.Context, "dockerfile": build.Dockerfile} {
 		if err := validateRepoPath(root, path); err != nil {
 			*problems = append(*problems, field+"."+name+": "+err.Error())
+			continue
+		}
+		info, err := os.Stat(filepath.Join(root, path))
+		if err != nil {
+			*problems = append(*problems, field+"."+name+": "+err.Error())
+			continue
+		}
+		if (name == "context" && !info.IsDir()) || (name == "dockerfile" && !info.Mode().IsRegular()) {
+			*problems = append(*problems, field+"."+name+" has the wrong file type")
 		}
 	}
 }
 
 func validateMigration(problems *[]string, root string, migration Migration) {
+	validateTimeout(problems, "migrations.timeout_seconds", migration.TimeoutSeconds)
 	require(problems, "migrations.image", migration.Image)
 	if len(migration.Command) == 0 {
 		*problems = append(*problems, "migrations.command must contain at least one argument")
@@ -440,6 +498,7 @@ func validateMigration(problems *[]string, root string, migration Migration) {
 }
 
 func validateHook(problems *[]string, root string, field string, hook Hook) {
+	validateTimeout(problems, field+".timeout_seconds", hook.TimeoutSeconds)
 	if strings.TrimSpace(hook.Name) == "" {
 		*problems = append(*problems, field+".name is required")
 	}
@@ -450,6 +509,16 @@ func validateHook(problems *[]string, root string, field string, hook Hook) {
 }
 
 func validateCheck(problems *[]string, root string, field string, check Check) {
+	validateTimeout(problems, field+".timeout_seconds", check.TimeoutSeconds)
+	if check.ExpectStatus != 0 && (check.ExpectStatus < 100 || check.ExpectStatus > 599) {
+		*problems = append(*problems, field+".expect_status must be an HTTP status code")
+	}
+	if check.Attempts < 0 || check.Attempts > 20 {
+		*problems = append(*problems, field+".attempts must be between 1 and 20, or omitted")
+	}
+	if len(check.Command) > 0 && check.Attempts > 1 {
+		*problems = append(*problems, field+".attempts applies only to HTTP checks")
+	}
 	if strings.TrimSpace(check.Name) == "" {
 		*problems = append(*problems, field+".name is required")
 	}
@@ -469,6 +538,15 @@ func validateCheck(problems *[]string, root string, field string, check Check) {
 }
 
 func validateEnv(problems *[]string, root string, field string, env EnvSpec) {
+	for _, name := range env.Required {
+		validateEnvName(problems, field+".required", name)
+	}
+	if env.Source == "" && env.IncludeAll {
+		*problems = append(*problems, field+".source is required with include_all")
+	}
+	if env.Source != "" && field != "env" && len(env.Required) == 0 && !env.IncludeAll {
+		*problems = append(*problems, field+".required must list injected keys, or set include_all: true")
+	}
 	if env.Source == "" && len(env.Required) == 0 {
 		return
 	}
@@ -486,18 +564,32 @@ func validateEnv(problems *[]string, root string, field string, env EnvSpec) {
 		return
 	}
 	for _, name := range env.Required {
-		if _, ok := values[name]; !ok {
-			*problems = append(*problems, field+".required missing "+name+" in "+env.Source)
+		if value, ok := values[name]; !ok || value == "" {
+			*problems = append(*problems, field+".required missing or empty "+name+" in "+env.Source)
 		}
 	}
 }
 
 func validateHealth(problems *[]string, field string, health Health, externallyReachable bool) {
-	if !externallyReachable {
-		return
+	validateTimeout(problems, field+".timeout_seconds", health.TimeoutSeconds)
+	if health.HTTP != "" && len(health.Command) > 0 {
+		*problems = append(*problems, field+" must use HTTP or command, not both")
 	}
-	if health.HTTP == "" && len(health.Command) == 0 {
-		*problems = append(*problems, field+" is required for services with published ports")
+	if externallyReachable && health.HTTP == "" && len(health.Command) == 0 {
+		*problems = append(*problems, field+" is required for externally reachable services")
+	}
+}
+func validateTimeout(problems *[]string, field string, seconds int) {
+	if seconds < 0 || seconds > 86400 {
+		*problems = append(*problems, field+" must be between 0 and 86400 seconds")
+	}
+}
+
+var envKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validateEnvName(problems *[]string, field, name string) {
+	if !envKeyPattern.MatchString(name) {
+		*problems = append(*problems, field+" contains an invalid env name")
 	}
 }
 

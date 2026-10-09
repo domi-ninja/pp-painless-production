@@ -130,6 +130,7 @@ func TestRenderBundleUsesAllocatedAutoPortForComposeAndRoute(t *testing.T) {
 
 func TestRenderBundleSupportsConvexStyleExtensions(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	writeFile(t, root, ".env.local", "VITE_SITE_URL=https://humanist.design\nVITE_CONVEX_URL=https://api.humanist.design\n")
 	writeFile(t, root, ".env.backend", "POSTGRES_URL=postgres://humanist:secret@postgres:5432/humanist\n")
 	writeFile(t, root, "humanist.caddy.tmpl", "api.humanist.design {\n\treverse_proxy 127.0.0.1:${service.convex-backend.port.3210}\n}\n")
