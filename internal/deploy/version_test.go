@@ -25,6 +25,7 @@ func legacyFixture(t *testing.T, root string) Project {
 			record.PreviousReleaseID = "previous"
 		}
 		writeNestedFile(t, root, filepath.Join(".deploy", "releases", id, "hosts", "host", "compose.yml"), "services: {}\n")
+		writeNestedFile(t, root, filepath.Join(".deploy", "releases", id, "images", "web.tar"), "archive")
 		if err := writeJSON(filepath.Join(bundle, "metadata.json"), record); err != nil {
 			t.Fatal(err)
 		}

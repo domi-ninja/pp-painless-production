@@ -118,3 +118,9 @@ remote resource identities must still match; image artifacts must stay inside th
 recorded bundle. Current and previous releases remain available for rollback.
 No repair command or manual metadata edit is needed. Loading current-version metadata
 does not rewrite it; the next save records the current location.
+
+## Saved recovery inputs
+
+Each new release contains a private `recovery.json` and, when needed, a selected `migration.env`. Rollback uses saved hosts, phases, HTTP checks and migration inputs. It needs the original Compose files, service env files and image archives. Keep the whole release directory when moving a checkout.
+
+Rollback reads deployment identity without requiring today's env files or build inputs. It never runs today's application hooks or command checks against yesterday's containers. A release that uses those scripts requires explicit application recovery. A legacy release without a saved migration contract also requires manual database recovery. Container rollback cannot undo a Convex schema push or restore a database backup.

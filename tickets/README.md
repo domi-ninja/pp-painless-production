@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [012 - implement rollback ](012-implement-rollback.md)
 - [018 - define recovery and readiness ](018-define-recovery-and-readiness.md)
 - [011 - implement status and deployment records ](011-implement-status-and-deployment-records.md)
 - [019 - reconcile routes and services ](019-reconcile-routes-and-services.md)
@@ -26,6 +25,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [Completed 016](done/016-protect-secret-inputs-and-output.md)
 
 - [Completed 017](done/017-update-toolchain-and-security-guide.md)
+
+- [Completed 012](done/012-implement-rollback.md)
 
 ## Earlier work
 

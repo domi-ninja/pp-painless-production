@@ -176,6 +176,9 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 		})
 	}
 
+	if err := saveRecoveryContract(root, plan, bundle); err != nil {
+		return Bundle{}, err
+	}
 	return bundle, nil
 }
 

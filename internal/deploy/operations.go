@@ -129,8 +129,13 @@ func (d Deployer) Deploy() error {
 			previous, loadErr := LoadRelease(d.Root, plan.Config.Project, state.CurrentReleaseID)
 			if loadErr != nil {
 				rollbackErrors = append(rollbackErrors, loadErr.Error())
-			} else if _, rollbackErr := d.ApplyRelease(planForRecord(plan, previous), bundleFromRecord(previous)); rollbackErr != nil {
-				rollbackErrors = append(rollbackErrors, rollbackErr.Error())
+			} else {
+				recovery, recoveryErr := recoveryPlan(d.Root, previous)
+				if recoveryErr != nil {
+					rollbackErrors = append(rollbackErrors, recoveryErr.Error())
+				} else if _, rollbackErr := d.ApplyRelease(recovery, bundleFromRecord(previous)); rollbackErr != nil {
+					rollbackErrors = append(rollbackErrors, rollbackErr.Error())
+				}
 			}
 		}
 		if migrationRan {
@@ -789,7 +794,7 @@ func (d Deployer) Rollback() error {
 		return err
 	}
 	defer unlock()
-	plan, err := LoadPlan(d.Root, d.configPath())
+	plan, err := d.cleanupPlan()
 	if err != nil {
 		return err
 	}
@@ -809,37 +814,37 @@ func (d Deployer) Rollback() error {
 		return err
 	}
 
-	if err := d.checkLegacyHosts(plan); err != nil {
+	recovery, err := recoveryPlan(d.Root, previous)
+	if err != nil {
 		return err
 	}
-	unlockHosts, err := d.lockHosts(plan, true)
+	currentPlan, err := recoveryPlan(d.Root, current)
+	if err != nil {
+		return err
+	}
+	if err := d.checkLegacyHosts(recovery); err != nil {
+		return err
+	}
+	unlockHosts, err := d.lockHosts(recovery, true)
 	if err != nil {
 		return err
 	}
 	defer unlockHosts()
-	if plan.Config.Migrations != nil && current.ReleaseID != "" {
-		fmt.Fprintln(d.Out, "running DB rollback")
-		image := plan.Config.Migrations.Image
-		if len(current.ImageTags) > 0 {
-			image = current.ImageTags[0]
+	if currentPlan.Config.Migrations != nil {
+		if !imageIDPattern.MatchString(current.Migration.Image) {
+			return fmt.Errorf("saved migration image is unavailable; database recovery needs manual action")
 		}
-		manifest, err := readImageManifest(filepath.Join(current.BundlePath, "images.json"))
-		if err != nil {
-			return err
+		if _, err := d.Runner.Output(d.Root, "docker", "image", "inspect", current.Migration.Image); err != nil {
+			return fmt.Errorf("saved migration image is unavailable: %w", err)
 		}
-		if imageIDPattern.MatchString(current.Migration.Image) {
-			image = current.Migration.Image
-		} else if len(manifest.Images) > 0 {
-			image = manifest.Images[0].ID
-		}
-		if err := d.runMigration(plan.Config.Migrations, image, true); err != nil {
+		if err := d.runMigration(currentPlan.Config.Migrations, current.Migration.Image, true); err != nil {
 			return err
 		}
 	}
 
 	bundle := bundleFromRecord(previous)
 	fmt.Fprintf(d.Out, "rolling back to %s\n", previous.ReleaseID)
-	if _, err := d.ApplyRelease(planForRecord(plan, previous), bundle); err != nil {
+	if _, err := d.ApplyRelease(recovery, bundle); err != nil {
 		return err
 	}
 	if err := d.Runner.context().Err(); err != nil {
