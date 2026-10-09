@@ -46,9 +46,8 @@ function bootstrap(args) {
   setDefault('INSTANCE_NAME', project);
   setDefault('POSTGRES_DB', project.replaceAll('-', '_'));
   setDefault('POSTGRES_USER', project.replaceAll('-', '_'));
-  setDefault('MINIO_ROOT_USER', crypto.randomBytes(12).toString('hex'));
   setDefault('STORAGE_ACCESS_KEY', crypto.randomBytes(12).toString('hex'));
-  for (const key of ['INSTANCE_SECRET', 'POSTGRES_PASSWORD', 'MINIO_ROOT_PASSWORD', 'STORAGE_SECRET_KEY']) secret(key, 32);
+  for (const key of ['INSTANCE_SECRET', 'POSTGRES_PASSWORD', 'STORAGE_SECRET_KEY']) secret(key, 32);
   for (const [key, suffix] of Object.entries({ EXPORTS: 'exports', SNAPSHOT_IMPORTS: 'snapshot-imports', MODULES: 'modules', FILES: 'files', SEARCH: 'search' })) {
     setDefault(`S3_STORAGE_${key}_BUCKET`, `${project}-convex-${suffix}`);
   }

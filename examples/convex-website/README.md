@@ -1,6 +1,6 @@
 # Convex website
 
-This template deploys a Vite website, Convex backend and private dashboard, Postgres and MinIO on one host. Copy it into an existing Convex app with a `build:web` script, a pinned `convex` dependency and a pnpm lockfile. Merge the ignore rules. Replace the project name, SSH target and site/API hostnames in [deploy.yml](deploy.yml) and the [Caddy template](deploy/caddy/convex-website.caddy.tmpl).
+This template deploys a Vite website, Convex backend and private dashboard, Postgres and SeaweedFS on one host. Copy it into an existing Convex app with a `build:web` script, a pinned `convex` dependency and a pnpm lockfile. Merge the ignore rules. Replace the project name, SSH target and site/API hostnames in [deploy.yml](deploy.yml) and the [Caddy template](deploy/caddy/convex-website.caddy.tmpl).
 
 ```sh
 pnpm install --frozen-lockfile
@@ -12,7 +12,7 @@ pp status
 
 Bootstrap writes `.env.prod` with mode 0600. It preserves existing credentials, names, URLs and application keys. The [example env file](.env.prod.example) lists the keys; its placeholders are not usable credentials. The hooks use the app's installed Convex CLI and pass `.env.prod` explicitly. They never download a CLI during deployment.
 
-The infrastructure-ready hook creates the buckets and a MinIO account limited to those buckets before starting the backend. Only MinIO receives root credentials. After backend health succeeds, hooks refresh the admin key, set `SITE_URL`, `JWT_PRIVATE_KEY` and `JWKS`, then deploy functions. This allowlist assumes Convex Auth. Adapt it to the app's provider; never upload infrastructure credentials or bulk-copy the env file.
+SeaweedFS creates the declared buckets during startup and loads an account limited to reading, writing and listing those buckets. Its health check verifies authenticated access before the backend starts. Internal storage APIs stay on loopback. After backend health succeeds, hooks refresh the admin key, set `SITE_URL`, `JWT_PRIVATE_KEY` and `JWKS`, then deploy functions. This allowlist assumes Convex Auth. Adapt it to the app's provider; never upload infrastructure credentials or bulk-copy the env file.
 
 ## Dashboard
 
@@ -33,7 +33,7 @@ bash scripts/bootstrap-prod-env.sh convex.example.com --project convex-website -
 pp deploy
 ```
 
-It changes the instance, database, MinIO and JWT secrets, removes the cached admin key, and saves `.env.prod.previous` before replacing the file. It preserves database, bucket and storage account names and other app-owned keys. The Postgres wrapper synchronizes the password on existing volumes. Deploy that wrapper with the existing credentials before rotating an older installation.
+It changes the instance, database, storage and JWT secrets, removes the cached admin key, and saves `.env.prod.previous` before replacing the file. It preserves database, bucket and storage account names and other app-owned keys. The Postgres wrapper synchronizes the password on existing volumes. Deploy that wrapper with the existing credentials before rotating an older installation.
 
 Keep the recovery copy until the app and database are verified. A second rotation refuses to overwrite it. To restore credentials:
 
@@ -46,7 +46,9 @@ Restore preserves the backup and does not contact the host. Deploy applies the r
 
 ## Existing installations
 
-Preserve the configured data paths when adopting this template. New installations use `/data/pp/${project}/${environment}/postgres` and `/data/pp/${project}/${environment}/s3`. Changing an existing bind path starts with different data. Keep the old paths until you have copied and verified the data deliberately.
+For a new installation, create the configured bind directories on the host before deploying. SeaweedFS needs its directory owned by UID/GID 10001. Postgres initializes its own directory.
+
+Preserve the configured Postgres data path when adopting this template. SeaweedFS uses a new storage directory; it cannot read old MinIO data. Follow the [storage migration guidance](../images.md) before switching an existing installation. New installations use `/data/pp/${project}/${environment}/postgres` and `/data/pp/${project}/${environment}/seaweedfs`. Changing an existing bind path starts with different data. Keep the old paths until you have copied and verified the data deliberately.
 
 Helpers require `PP_PROJECT`, `PP_ENVIRONMENT`, `PP_HOST` and `PP_ENV_FILE`. pp sets them for hooks. Manual runs must supply the same identity; container selection rejects missing or ambiguous matches. See the [backup guide](../backups.md) before changing storage or infrastructure versions.
 

@@ -1,9 +1,8 @@
-FROM node:22-bookworm AS build
+FROM node:22-bookworm@sha256:0e5f906573693feaa1e21057ebdcfdb5bd5021f050b2dc7c9deceb629c7da2a8 AS build
 
 WORKDIR /app
 
 RUN corepack enable
-ENV PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS=true
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -16,7 +15,7 @@ ENV VITE_CONVEX_URL=${VITE_CONVEX_URL}
 
 RUN pnpm run build:web
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94 AS runtime
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html

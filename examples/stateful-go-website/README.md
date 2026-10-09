@@ -1,15 +1,11 @@
 # Stateful Go website
 
-Use this example for a small server-rendered application that needs durable local data and database migrations. `pp` builds one Go image, mounts a named volume at `/data`, passes the required secret, checks `/health`, and publishes the service through Caddy.
+Copy this template into a Go app with `cmd/server`, frontend assets and Goose migrations. Replace the host and domain in [deploy.yml](deploy.yml), merge the ignore rules, and create `.env` with a real `JWT_SECRET`. Then run `pp plan` and `pp deploy`.
 
-The example contains:
+The [Dockerfile](Dockerfile) builds for the selected target architecture. The runtime runs as UID/GID 10001 and stores its SQLite database, uploads and configuration in the named volume at `/data`. A fresh Docker volume inherits that directory's ownership. Before adopting this image with an old root-owned volume, stop the app, back it up and change only that volume's ownership to 10001:10001.
 
-- [`deploy.yml`](deploy.yml) for the image, secret, volume, health check, and route
-- [`Dockerfile`](Dockerfile) for the Go build and runtime image
-- [`docker-entrypoint.sh`](docker-entrypoint.sh) for copying packaged assets and applying SQLite migrations before startup
-- [`app.prod.toml`](app.prod.toml) for runtime defaults
-- [`.env.example`](.env.example) for the required `JWT_SECRET`
+The [entrypoint](docker-entrypoint.sh) copies `app.prod.toml` only when `/data/app.toml` does not exist. Later image changes do not replace the stored config. Edit the stored file deliberately or add an application config migration. Packaged frontend assets and migration files refresh on each start.
 
-Copy the files into the application repository, replace `deploy@example.com` and `stateful.example.com`, then create `.env` with a real `JWT_SECRET`. The Dockerfile expects the Go modules, `cmd/server`, frontend assets, and Goose migrations from the application.
+Goose runs SQLite migrations before every container start. These migrations run outside pp's migration record. Container rollback cannot undo them. Use compatible schema changes and a verified database backup before deploying. Never assume that restarting an older image restores old data.
 
-Run `pp plan` to catch missing config or environment values before `pp deploy`.
+See [image updates](../images.md) and [backup and isolated restore](../backups.md).

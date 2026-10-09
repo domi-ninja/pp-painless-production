@@ -1,8 +1,8 @@
-.astro
-.git
-.env*
-dist
 node_modules
-Dockerfile.claude-code
-cursor-chat-logs
+dist
+.git
 .deploy
+.env
+.env.*
+!.env.prod.example
+!.env.example

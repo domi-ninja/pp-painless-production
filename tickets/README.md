@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [028 - make examples maintainable ](028-make-examples-maintainable.md)
 - [029 - remove unrelated operations ](029-remove-unrelated-operations.md)
 - [030 - consolidate docs and ci ](030-consolidate-docs-and-ci.md)
 - [031 - simplify execution code ](031-simplify-execution-code.md)
@@ -38,6 +37,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [Completed 026](done/026-improve-starter-plan-and-help.md)
 
 - [Completed 027](done/027-repair-convex-bootstrap.md)
+
+- [Completed 028](done/028-make-examples-maintainable.md)
 
 ## Earlier work
 

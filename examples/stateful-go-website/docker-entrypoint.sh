@@ -8,10 +8,10 @@ if [ ! -f /data/app.toml ]; then
 fi
 
 rm -rf /data/frontend/assets
-cp -a /opt/app/frontend/assets /data/frontend/assets
+cp -R /opt/app/frontend/assets /data/frontend/assets
 
 rm -rf /data/sql/migrations
-cp -a /opt/app/sql/migrations /data/sql/migrations
+cp -R /opt/app/sql/migrations /data/sql/migrations
 
 /opt/app/goose -dir ./sql/migrations sqlite3 ./data.db up
 

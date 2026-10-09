@@ -5,7 +5,6 @@ const os = require('node:os');
 const path = require('node:path');
 const { bootstrap } = require('./bootstrap-env.cjs');
 const { readEnv, writeEnv } = require('./env-file.cjs');
-const { storagePolicy } = require('./storage-policy.cjs');
 
 test('initialization preserves app values and explicit rotation keeps a recovery copy', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-convex-'));
@@ -39,10 +38,4 @@ test('env parsing rejects symlinks and preserves literal values', t => {
   fs.symlinkSync(file, path.join(root, 'link'));
   assert.throws(() => readEnv(path.join(root, 'link')), /symlink/);
   assert.throws(() => bootstrap(['--env-file']), /path/);
-});
-test('storage policy restricts resources and excludes admin actions', () => {
-  const policy = storagePolicy(['shop-files', 'shop-modules']);
-  assert.deepEqual(policy.Statement[0].Resource, ['arn:aws:s3:::shop-files', 'arn:aws:s3:::shop-modules']);
-  assert.ok(policy.Statement.flatMap(s => s.Action).every(action => !action.includes('*') && !action.includes('Policy') && !action.includes('DeleteBucket')));
-  assert.throws(() => storagePolicy(['*']), /bucket/);
 });

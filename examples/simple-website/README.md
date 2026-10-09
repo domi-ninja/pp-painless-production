@@ -11,3 +11,5 @@ The example contains:
 Copy these files into the application repository, then replace `deploy@example.com` and `simple.example.com`. The Dockerfile expects `package.json`, `pnpm-lock.yaml`, and a build that writes the site to `dist/`.
 
 Run `pp plan` to validate the config, then `pp deploy` to release it.
+
+Pin pnpm in the app's `packageManager` field. Declare only dependency build scripts the app needs in `pnpm-workspace.yaml`. The image does not approve every dependency's install scripts. See [image updates](../images.md).
