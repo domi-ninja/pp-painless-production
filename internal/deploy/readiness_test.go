@@ -40,7 +40,7 @@ func TestRecoveryRevertsDatabaseBeforeContainers(t *testing.T) {
 			for _, name := range []string{"docker", "ssh", "scp"} {
 				writeExecutable(t, root, name, `#!/bin/sh
 printf '%s\n' "$*" >> "$PP_TEST_COMMAND_LOG"
-case "$*" in 'run --rm'*) [ "${PP_TEST_FAIL_REVERT:-}" != 1 ] || exit 1;; esac
+case "$*" in 'start --attach'*) [ "${PP_TEST_FAIL_REVERT:-}" != 1 ] || exit 1;; esac
 if [ "${2:-}" = 'sh -s' ]; then cat >/dev/null; fi
 `)
 			}
@@ -48,7 +48,7 @@ if [ "${2:-}" = 'sh -s' ]; then cat >/dev/null; fi
 			d := NewDeployer(root, &out, &out)
 			step, _, err := d.recoverRelease(current, &previous, true)
 			commands := string(mustRead(t, log))
-			revert := strings.Index(commands, "run --rm")
+			revert := strings.Index(commands, "start --attach")
 			apply := strings.Index(commands, "compose -f")
 			if revert < 0 {
 				t.Fatal("no database revert")

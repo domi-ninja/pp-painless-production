@@ -9,7 +9,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	"git.domi.ninja/domi-ninja/infra-meta-forgejo/internal/deploy"
+	"github.com/domi-ninja/pp-painless-production/internal/deploy"
 )
 
 func Main(name string, args []string, stdout, stderr io.Writer) int {

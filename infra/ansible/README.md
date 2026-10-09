@@ -6,10 +6,12 @@ It configures SSH access, firewall rules, Docker and optional Caddy or persisten
 
 ## First run
 
-Install Ansible on your workstation, then copy the examples:
+Use Python 3.12+ with virtual-environment support on your workstation, then install the requirements and copy the examples:
 
 ```sh
 cd infra/ansible
+python3 -m venv .venv
+. .venv/bin/activate
 python3 -m pip install -r requirements.txt
 ansible-galaxy collection install -r requirements.yml
 cp inventory/prod.example.yml inventory/prod.local.yml

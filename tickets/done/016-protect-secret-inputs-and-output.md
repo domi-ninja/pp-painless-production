@@ -2,7 +2,7 @@
 
 ## Problem
 
-Address audit findings 2, 3, 4, 12 with generic pp behavior and reusable examples.
+Runtime inputs share too many env keys, diagnostics can expose credentials, and symlink writes can escape private state.
 
 ## Work
 
@@ -13,7 +13,7 @@ Address audit findings 2, 3, 4, 12 with generic pp behavior and reusable example
 
 ## Acceptance
 
-The listed behavior has focused checks and matching user documentation. Existing deployment identity, data paths and rollback artifacts remain usable.
+Verify the behavior above with isolated fixtures and document its user-visible limits. Preserve existing deployment identity, data paths and recovery artifacts.
 
 ## Decision
 

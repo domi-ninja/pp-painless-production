@@ -8,7 +8,7 @@ import (
 func TestTemplatesRenderArgumentsAndFixedPortsWithoutExpandingEnvValues(t *testing.T) {
 	plan := Plan{Config: Config{Project: Project{Name: "shop", Environment: "prod"}, Services: map[string]Service{"web": {Hosts: []string{"app"}, Ports: []Port{{Published: FixedPort(8080), Target: 80}}}}}, Hosts: []HostPlan{{ID: "app"}}, ReleaseID: "release"}
 	values := map[string]string{"VALUE": "literal${service.web.port.80}"}
-	service, err := renderComposeService(plan, "app", "web", Service{Command: []string{"echo", "${release}", "${service.web.port.80}", "${env.VALUE}"}, Entrypoint: []string{"/bin/${project}"}}, RenderVars{}, values, "")
+	service, err := renderComposeService(plan, "app", "web", Service{Command: []string{"echo", "${release}", "${service.web.port.80}", "${env.VALUE}"}, Entrypoint: []string{"/bin/${project}"}}, values, "")
 	if err != nil {
 		t.Fatal(err)
 	}

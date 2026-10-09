@@ -2,7 +2,7 @@
 
 ## Problem
 
-Address audit findings 23, 24 with generic pp behavior and reusable examples.
+Docker relocation can copy the wrong source or discard daemon settings. A missing data mount can start an empty database.
 
 ## Work
 
@@ -13,7 +13,7 @@ Address audit findings 23, 24 with generic pp behavior and reusable examples.
 
 ## Acceptance
 
-The listed behavior has focused checks and matching user documentation. Existing deployment identity, data paths and rollback artifacts remain usable.
+Verify the behavior above with isolated fixtures and document its user-visible limits. Preserve existing deployment identity, data paths and recovery artifacts.
 
 ## Decision
 

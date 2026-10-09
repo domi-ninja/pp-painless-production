@@ -300,80 +300,11 @@ func (d Deployer) RunMigrationRecord(plan Plan, rollback bool) (StepRecord, erro
 	return record, nil
 }
 
-func (d Deployer) runMigration(migration *Migration, image string, rollback bool) error {
-	command := migration.Command
-	if rollback {
-		command = migration.RollbackCommand
-	}
-	if len(command) == 0 {
-		if rollback && migration.RestorePlan != "" {
-			return fmt.Errorf("restore plan requires manual action: %s", migration.RestorePlan)
-		}
-		return fmt.Errorf("migration command is empty")
-	}
-
-	args := []string{"run", "--rm", "--pull", "never"}
-	if migration.Env.Source != "" {
-		values, err := loadSelectedEnv(d.Root, migration.Env)
-		if err != nil {
-			return err
-		}
-		body, err := encodeEnv(values)
-		if err != nil {
-			return err
-		}
-		file, err := os.CreateTemp("", "pp-migration-env-")
-		if err != nil {
-			return err
-		}
-		defer os.Remove(file.Name())
-		if _, err := file.Write(body); err != nil {
-			file.Close()
-			return err
-		}
-		if err := file.Close(); err != nil {
-			return err
-		}
-		args = append(args, "--env-file", file.Name())
-	}
-	args = append(args, image)
-	args = append(args, command...)
-	ctx, cancel := optionalTimeoutContext(d.Runner.context(), migration.TimeoutSeconds)
-	defer cancel()
-	return d.Runner.RunEnvContext(ctx, d.Root, nil, "docker", args...)
-}
-
 func (d Deployer) ApplyBundle(plan Plan, bundle Bundle) error {
-	for _, host := range bundle.Hosts {
-		images, err := imagesForHost(host, bundle.Images)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(d.Out, "host %s: upload\n", host.ID)
-		if err := d.UploadHostBundle(host, images); err != nil {
-			return fmt.Errorf("host %s upload: %w", host.ID, err)
-		}
-		for _, image := range images {
-			fmt.Fprintf(d.Out, "host %s: docker load %s\n", host.ID, image.ID)
-			if err := d.Remote(host.SSH, "docker load -i "+shellQuote(host.RemoteDir+"/images/"+filepath.Base(image.Tar))); err != nil {
-				return fmt.Errorf("host %s docker load: %w", host.ID, err)
-			}
-		}
-		if err := d.PullHostImages(plan, host); err != nil {
-			return err
-		}
-		if err := d.pinHostImages(plan, host); err != nil {
-			return err
-		}
-		if err := d.removeUploadedImages(host, images); err != nil {
-			return err
-		}
-		fmt.Fprintf(d.Out, "host %s: compose up\n", host.ID)
-		if err := d.ComposeUp(plan, host, nil, true); err != nil {
-			return fmt.Errorf("host %s compose up: %w", host.ID, err)
-		}
+	if err := d.UploadLoadPull(plan, bundle); err != nil {
+		return err
 	}
-	return nil
+	return d.ComposeUpPhase(plan, bundle, nil, true)
 }
 
 func (d Deployer) ApplyRelease(plan Plan, bundle Bundle) ([]CheckRecord, error) {

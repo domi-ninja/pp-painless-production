@@ -1,10 +1,6 @@
 # pp implementation tickets
 
-Work in the listed order, with one implementation commit per completed ticket. Review the branch before merging.
-
-## Open
-
-- [031 - Simplify shared execution code](031-simplify-execution-code.md)
+Use one implementation commit per completed ticket. Review the branch before merging.
 
 ## Completed
 
@@ -25,9 +21,10 @@ Work in the listed order, with one implementation commit per completed ticket. R
 - [027 - Separate Convex initialization, rotation and recovery](done/027-repair-convex-bootstrap.md)
 - [028 - Make examples portable and maintainable](done/028-make-examples-maintainable.md)
 - [029 - Remove unrelated operational code and records](done/029-remove-unrelated-operations.md)
+- [030 - Consolidate documentation and focused validation](done/030-consolidate-docs-and-ci.md)
 
-- [Completed 030](done/030-consolidate-docs-and-ci.md)
+- [031 - Simplify shared execution code](done/031-simplify-execution-code.md)
 
 ## Earlier work
 
-Other completed tickets are in [done/](done/). Abandoned designs are in [dropped/](dropped/).
+Other completed tickets are in [done/](done/). They record their original scope; the guides describe current behavior. Abandoned designs are in [dropped/](dropped/).

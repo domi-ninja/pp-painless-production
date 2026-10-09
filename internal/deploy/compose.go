@@ -86,7 +86,6 @@ type HostBundle struct {
 }
 
 func RenderBundle(root string, plan Plan) (Bundle, error) {
-	vars := VarsForPlan(plan)
 	envValues, err := loadConfigEnv(root, plan.Config.Env)
 	if err != nil {
 		return Bundle{}, err
@@ -150,7 +149,7 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 				envFiles = append(envFiles, envFile)
 			}
 
-			composeService, err := renderComposeService(plan, hostPlan.ID, serviceID, service, vars, envValues, envFile)
+			composeService, err := renderComposeService(plan, hostPlan.ID, serviceID, service, envValues, envFile)
 			if err != nil {
 				return Bundle{}, err
 			}
@@ -344,7 +343,7 @@ func routeBelongsToHost(cfg Config, route Route, hostID string) bool {
 	return ok && contains(service.Hosts, hostID)
 }
 
-func renderComposeService(plan Plan, hostID string, serviceID string, service Service, vars RenderVars, envValues map[string]string, envFile string) (ComposeService, error) {
+func renderComposeService(plan Plan, hostID string, serviceID string, service Service, envValues map[string]string, envFile string) (ComposeService, error) {
 	labels := map[string]string{
 		"pp.project":     plan.Config.Project.Name,
 		"pp.environment": plan.Config.Project.Environment,

@@ -2,7 +2,7 @@
 
 ## Problem
 
-Address audit findings 32, 35, 39 with generic pp behavior and reusable examples.
+The starter's health check always succeeds, the plan omits useful inputs, and a local build can replace the installed CLI.
 
 ## Work
 
@@ -14,7 +14,7 @@ Address audit findings 32, 35, 39 with generic pp behavior and reusable examples
 
 ## Acceptance
 
-The listed behavior has focused checks and matching user documentation. Existing deployment identity, data paths and rollback artifacts remain usable.
+Verify the behavior above with isolated fixtures and document its user-visible limits. Preserve existing deployment identity, data paths and recovery artifacts.
 
 ## Decision
 

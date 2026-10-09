@@ -4,7 +4,7 @@ Keep two repositories separate: this tool's clone supplies `pp` and the server p
 
 ## 1. Clone and install
 
-On your deployment machine, you need Git, Go 1.26.9 or a newer supported, patched release, Make, SSH/SCP and a working Docker daemon with Buildx for local image builds. Buildx must support the cache-pruning flags listed under [retention](deploy-cli.md#retention-and-cleanup). pp creates its own builder and downloads BuildKit on first use. Install Ansible there too if you will provision servers. The CLI uses Unix file locking, so use a Linux or macOS environment.
+On your deployment machine, you need Git, Go 1.26.9 or a newer supported, patched release, Make, SSH/SCP and a working Docker daemon with Buildx for local image builds. Buildx must support the cache-pruning flags listed under [retention](deploy-cli.md#retention-and-cleanup). pp creates its own builder and downloads BuildKit on first use. For provisioning, install Python 3.12+ with virtual-environment support and the Ansible requirements below. The CLI uses Unix file locking, so use a Linux or macOS environment.
 
 ```sh
 git clone https://github.com/domi-ninja/pp-painless-production.git
@@ -32,6 +32,8 @@ For a new Ubuntu 22.04+ host, work from the tool's clone:
 
 ```sh
 cd infra/ansible
+python3 -m venv .venv
+. .venv/bin/activate
 python3 -m pip install -r requirements.txt
 ansible-galaxy collection install -r requirements.yml
 cp inventory/prod.example.yml inventory/prod.local.yml

@@ -56,7 +56,7 @@ func (d Deployer) pinMigrationImage(plan Plan, reference string) (string, error)
 	if managed {
 		manifest.Images = append(manifest.Images, ManagedImage{Reference: cache, ID: id})
 	}
-	if err := writeJSON(path, manifest); err != nil {
+	if err := writeImageManifest(path, manifest); err != nil {
 		return "", err
 	}
 	if err := d.Runner.Run(d.Root, "docker", "tag", id, alias); err != nil {

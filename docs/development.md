@@ -14,7 +14,7 @@ go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 `make build` writes `bin/pp`. `make install` explicitly replaces the installed binary; `make clean` removes only `bin/pp`. Inspect an installed binary with `go version -m "$(command -v pp)"` after upgrading the compiler.
 
-Tests use repo-owned temporary fixtures and mocked transport. Some tests also validate interpolation against an already available Docker image. They do not contact production hosts or sibling apps. Do not make live credentials or infrastructure a test prerequisite.
+Tests use repo-owned temporary fixtures and mocked transport. When Docker is available, the Compose interpolation test imports a disposable fixture image and inspects container metadata without starting it. They do not contact production hosts or sibling apps. Do not make live credentials or infrastructure a test prerequisite.
 
 ## Helper and host checks
 
@@ -38,9 +38,10 @@ The access tests need `ssh-keygen` and `sshd`. They run key and effective-policy
 
 ## Isolated Docker tests
 
-Retention integration is opt-in:
+Retention and migration container checks are opt-in. The migration test needs the pinned Debian image:
 
 ```sh
+docker pull debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 PP_TEST_DOCKER=1 go test ./internal/deploy -run 'Docker|Retention' -count=1
 ```
 

@@ -1,6 +1,8 @@
 package deploy
 
 import (
+	"archive/tar"
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -29,11 +31,30 @@ func TestComposePreservesLiteralValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	images, err := exec.Command("docker", "image", "ls", "-q").Output()
-	if err != nil || len(strings.Fields(string(images))) == 0 {
-		t.Skip("runtime inspection requires Docker and a cached image")
+	project := "literal-test-" + strings.ToLower(filepath.Base(root)) + "-" + strings.ToLower(filepath.Base(filepath.Dir(root)))
+	image := "pp-fixture/" + project + ":test"
+	t.Cleanup(func() {
+		if out, err := exec.Command("docker", "image", "rm", image).CombinedOutput(); err != nil {
+			t.Errorf("fixture image cleanup: %v %s", err, out)
+		}
+	})
+	var archive bytes.Buffer
+	writer := tar.NewWriter(&archive)
+	if err := writer.WriteHeader(&tar.Header{Name: "fixture", Mode: 0600, Size: int64(len(project))}); err != nil {
+		t.Fatal(err)
 	}
-	service, err := renderComposeService(Plan{}, "host", "web", Service{Image: strings.Fields(string(images))[0], Command: []string{"true"}, Environment: map[string]string{"INLINE": "${env.VALUE}"}, Health: Health{Command: []string{"printf", "${env.VALUE}"}}}, RenderVars{}, map[string]string{"VALUE": values["DOLLARS"]}, path)
+	if _, err := writer.Write([]byte(project)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	createImage := exec.Command("docker", "import", "-", image)
+	createImage.Stdin = &archive
+	if out, err := createImage.CombinedOutput(); err != nil {
+		t.Fatalf("create fixture image: %v %s", err, out)
+	}
+	service, err := renderComposeService(Plan{}, "host", "web", Service{Image: image, Command: []string{"true"}, Environment: map[string]string{"INLINE": "${env.VALUE}"}, Health: Health{Command: []string{"printf", "${env.VALUE}"}}}, map[string]string{"VALUE": values["DOLLARS"]}, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +62,6 @@ func TestComposePreservesLiteralValues(t *testing.T) {
 	if err := writeComposeYAML(compose, ComposeFile{Services: map[string]ComposeService{"web": service}}); err != nil {
 		t.Fatal(err)
 	}
-	project := "literal-test-" + strings.ToLower(filepath.Base(root)) + "-" + strings.ToLower(filepath.Base(filepath.Dir(root)))
 	args := []string{"compose", "-p", project, "-f", compose}
 	t.Cleanup(func() {
 		if out, err := exec.Command("docker", append(args, "down", "--remove-orphans")...).CombinedOutput(); err != nil {

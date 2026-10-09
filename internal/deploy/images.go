@@ -52,6 +52,23 @@ func readImageManifest(path string) (imageManifest, error) {
 	return m, nil
 }
 
+func writeImageManifest(path string, manifest imageManifest) error {
+	unique := make([]ManagedImage, 0, len(manifest.Images))
+	positions := map[string]int{}
+	for _, image := range manifest.Images {
+		key := image.Reference + "\x00" + image.ID
+		if index, ok := positions[key]; ok {
+			unique[index].Source = unique[index].Source || image.Source
+			unique[index].Built = unique[index].Built || image.Built
+			continue
+		}
+		positions[key] = len(unique)
+		unique = append(unique, image)
+	}
+	manifest.Images = unique
+	return writeJSON(path, manifest)
+}
+
 func managedImagePrefix(project Project) string {
 	return "pp.local/" + project.Name + "/" + project.Environment + "/"
 }
@@ -72,7 +89,7 @@ func (d Deployer) recordBuiltImages(plan Plan, bundle Bundle, image ImageBundle)
 		}
 		m.Images = append(m.Images, ManagedImage{Reference: tag, ID: id, Built: true})
 	}
-	return writeJSON(path, m)
+	return writeImageManifest(path, m)
 }
 
 // Match the rendered image names, not merely build IDs: legacy single-build
@@ -180,7 +197,7 @@ func (d Deployer) pinHostImages(plan Plan, host HostBundle) error {
 			return fmt.Errorf("invalid image ID on %s for %s", host.SSH, serviceID)
 		}
 		manifest.Images = append(manifest.Images, ManagedImage{Reference: alias, ID: id})
-		if err := writeJSON(path, manifest); err != nil {
+		if err := writeImageManifest(path, manifest); err != nil {
 			return err
 		}
 		if err := d.Remote(host.SSH, "docker tag "+shellQuote(id)+" "+shellQuote(alias)); err != nil {
@@ -262,7 +279,7 @@ func (d Deployer) finishSourceImage(plan Plan, host HostBundle, service, referen
 	}
 	cache := sourceCacheReference(plan.Config.Project, service, reference)
 	manifest.Images = append(manifest.Images, ManagedImage{Reference: cache, ID: id})
-	if err := writeJSON(filepath.Join(host.Path, "images.json"), manifest); err != nil {
+	if err := writeImageManifest(filepath.Join(host.Path, "images.json"), *manifest); err != nil {
 		return err
 	}
 	return d.Remote(host.SSH, "docker tag "+shellQuote(id)+" "+shellQuote(cache))
@@ -310,7 +327,7 @@ func (d Deployer) recordPulledSources(plan Plan, host HostBundle) error {
 		}
 		alias := managedImagePrefix(plan.Config.Project) + item.Key + ":" + strings.ToLower(plan.ReleaseID)
 		manifest.Images = append(manifest.Images, ManagedImage{Reference: item.Value, ID: out, Source: true}, ManagedImage{Reference: alias, ID: out})
-		if err := writeJSON(path, manifest); err != nil {
+		if err := writeImageManifest(path, manifest); err != nil {
 			return err
 		}
 		if err := d.Remote(host.SSH, "docker tag "+shellQuote(out)+" "+shellQuote(alias)); err != nil {
@@ -417,7 +434,7 @@ func recordHostBuilds(host HostBundle, images []ImageBundle) error {
 			}
 		}
 	}
-	return writeJSON(path, manifest)
+	return writeImageManifest(path, manifest)
 }
 
 func (d Deployer) cleanupRemoteRelease(project Project, releaseID string, host HostRecord) error {

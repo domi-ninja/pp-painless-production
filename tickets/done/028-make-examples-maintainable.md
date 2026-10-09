@@ -2,7 +2,7 @@
 
 ## Problem
 
-Address audit findings 6, 38 with generic pp behavior and reusable examples.
+Examples use mutable image references, a root Go runtime and blanket dependency-script approval. Stateful updates need backup and restore guidance.
 
 ## Work
 
@@ -14,7 +14,7 @@ Address audit findings 6, 38 with generic pp behavior and reusable examples.
 
 ## Acceptance
 
-The listed behavior has focused checks and matching user documentation. Existing deployment identity, data paths and rollback artifacts remain usable.
+Verify the behavior above with isolated fixtures and document its user-visible limits. Preserve existing deployment identity, data paths and recovery artifacts.
 
 ## Decision
 

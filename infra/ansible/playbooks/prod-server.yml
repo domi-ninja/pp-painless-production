@@ -3,6 +3,14 @@
   hosts: prod_servers
   become: true
   pre_tasks:
+    - name: Load ignored host credentials when present
+      vars:
+        pp_credentials_file: "{{ playbook_dir }}/../host_vars/{{ inventory_hostname }}.credentials.local.yml"
+      ansible.builtin.include_vars:
+        file: "{{ pp_credentials_file }}"
+      when: lookup('ansible.builtin.fileglob', pp_credentials_file, wantlist=True) | length > 0
+      no_log: true
+
     - name: Refuse unsupported platform roles in the application playbook
       ansible.builtin.assert:
         that:
@@ -13,11 +21,6 @@
           - not (woodpecker_agent_enabled | default(false) | bool)
         fail_msg: "This playbook supports pp application hosts. Remove legacy Coolify flags; use separate playbooks for Git hosting and CI."
 
-    - name: Load ignored host credentials when present
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../host_vars/{{ inventory_hostname }}.credentials.local.yml"
-      failed_when: false
-      no_log: true
 
   roles:
     - role: base

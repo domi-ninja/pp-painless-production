@@ -29,7 +29,7 @@ func TestHTTPHealthCheckCannotExecuteURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := Service{Health: Health{HTTP: "${env.HEALTH_URL}"}}
-	rendered, err := renderComposeService(Plan{}, "host", "web", service, RenderVars{}, map[string]string{"HEALTH_URL": payload}, "")
+	rendered, err := renderComposeService(Plan{}, "host", "web", service, map[string]string{"HEALTH_URL": payload}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestHTTPHealthCheckCannotExecuteURL(t *testing.T) {
 
 func TestHTTPHealthCheckValidatesRenderedURL(t *testing.T) {
 	for _, value := range []string{"-O/tmp/file", "file:///etc/passwd", "http://", "http://user:pass@example.com/", "http://example.com/; touch /tmp/file", "http://example.com/\ncommand"} {
-		_, err := renderComposeService(Plan{}, "host", "web", Service{Health: Health{HTTP: "${env.URL}"}}, RenderVars{}, map[string]string{"URL": value}, "")
+		_, err := renderComposeService(Plan{}, "host", "web", Service{Health: Health{HTTP: "${env.URL}"}}, map[string]string{"URL": value}, "")
 		if err == nil {
 			t.Errorf("accepted %q", value)
 		}

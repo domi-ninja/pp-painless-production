@@ -64,6 +64,7 @@ function bootstrap(args) {
   }
   if (rotate) {
     delete values.CONVEX_SELF_HOSTED_ADMIN_KEY;
+    fs.chmodSync(file, 0o600);
     fs.copyFileSync(file, backup, fs.constants.COPYFILE_EXCL);
     fs.chmodSync(backup, 0o600);
   }

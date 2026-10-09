@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.domi.ninja/domi-ninja/infra-meta-forgejo/internal/deploy"
+	"github.com/domi-ninja/pp-painless-production/internal/deploy"
 )
 
 func TestConfigFlagSelectsEnvironmentState(t *testing.T) {

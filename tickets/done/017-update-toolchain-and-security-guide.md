@@ -2,7 +2,7 @@
 
 ## Problem
 
-Address audit findings 5, 8, 11, 41 with generic pp behavior and reusable examples.
+The CLI needs a patched compiler and a documented boundary between trusted deployment code and secret inputs.
 
 ## Work
 
@@ -12,7 +12,7 @@ Address audit findings 5, 8, 11, 41 with generic pp behavior and reusable exampl
 
 ## Acceptance
 
-The listed behavior has focused checks and matching user documentation. Existing deployment identity, data paths and rollback artifacts remain usable.
+Verify the behavior above with isolated fixtures and document its user-visible limits. Preserve existing deployment identity, data paths and recovery artifacts.
 
 ## Decision
 

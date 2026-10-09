@@ -1,4 +1,4 @@
-module git.domi.ninja/domi-ninja/infra-meta-forgejo
+module github.com/domi-ninja/pp-painless-production
 
 go 1.26.9
 

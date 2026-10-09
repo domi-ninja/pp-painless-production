@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"git.domi.ninja/domi-ninja/infra-meta-forgejo/internal/cli"
+	"github.com/domi-ninja/pp-painless-production/internal/cli"
 )
 
 func main() {
