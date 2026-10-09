@@ -1,51 +1,23 @@
-# 012 - Implement Rollback
+# 012 - Recover from the saved release contract
 
-## Goal
+## Problem
 
-Restore the previous known-good code and DB state with a single command.
+Rollback currently combines an old Compose bundle with current configuration, hooks and migration commands. Current secrets or Git inputs can block recovery.
 
-## Depends On
+## Work
 
-- 011
+- Save a versioned execution contract in each release, including phases, checks and migration inputs.
+- Recover from saved deployment inputs rather than current app scripts.
+- Verify all required artifacts before changing services or data.
+- Reject legacy recovery that would require guessing a migration or rerunning app-changing hooks.
+- Let inspection and recovery load identity without validating unrelated build inputs.
 
-## Scope
+## Acceptance
 
-- Identify previous verified release from local and host metadata.
-- Confirm required image tags and bundle files exist on hosts.
-- Run configured DB rollback command or restore plan.
-- Re-apply previous compose bundle.
-- Handle partial deployments by rolling back only hosts that advanced.
-- Run health checks after rollback.
-- Update deployment records with rollback metadata.
+Focused tests cover changed config, missing current env, missing artifacts and legacy release recovery. Hook-driven application changes require an explicit recovery path.
 
-## Existing Baseline
+## Decision
 
-- `pp rollback` exists.
-- Local state records current and previous release IDs.
-- Rollback reuses previous bundle metadata and does not rebuild images.
-- Failed deploy apply attempts to re-apply the previous release.
-- If a configured migration ran and a later step fails, deploy attempts the migration rollback command.
-- Basic rollback metadata is present in release metadata.
+Should rollback rerun current application hooks?
 
-This ticket remains open because the current rollback path is operationally useful but not yet rigorous enough to be the trusted recovery mechanism.
-
-## Deliverables
-
-- Hardened `deploy rollback` implementation.
-- Previous verified release selector.
-- Remote artifact verifier.
-- Partial-host rollback planner.
-- DB rollback/restore-plan executor with clear failure behavior.
-- Rollback metadata format that records attempted hosts, DB rollback/restore state, health checks, and errors.
-- Tests for missing previous release, missing host artifacts, restore-plan-only migrations, partial-host rollback, and successful rollback planning.
-
-## Acceptance Criteria
-
-- Rollback never rebuilds images.
-- Rollback fails early if previous artifacts are missing.
-- Rollback fails early if DB rollback is required but no rollback command or restore plan exists.
-- Successful rollback updates host state.
-- Failed rollback preserves logs and current observed state.
-- Rollback is invoked automatically after failed host apply or failed smoke check when migration already succeeded.
-- Rollback uses SSH-observed state from ticket 011 when deciding what advanced and what needs rollback.
-- Rollback health checks are recorded separately from deploy smoke checks.
+Default: never rerun current hooks; recover containers and saved checks, and require explicit recovery for hook-managed application changes.

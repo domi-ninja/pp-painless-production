@@ -1,52 +1,23 @@
-# 011 - Implement SSH-Observed Status And Deployment Records
+# 011 - Report attempts and observed deployment state
 
-## Goal
+## Problem
 
-Implement `deploy status` with local deployment records plus SSH-observed host state.
+Status reports the last local success even when a later attempt leaves a failed or partial live deployment.
 
-## Depends On
+## Work
 
-- 009
-- 010
+- Persist the latest attempt and each host's completed apply step.
+- Record failed recovery and its checks separately.
+- Report persistence failures instead of discarding them.
+- Inspect current containers over SSH and compare their release labels and health with local metadata.
+- Permit status without current secrets, Dockerfiles or Git history.
 
-## Scope
+## Acceptance
 
-- Query configured hosts over SSH.
-- Display desired vs observed state.
-- Show current release, previous release, git SHA, dirty flag, service status, image tags, disk space, and last deploy result.
-- Use the existing local deployment metadata under `.deploy/releases/`.
-- Read remote state from Docker, Caddy route files, image tags, disk usage, and pp allocation files.
+Focused tests cover failed first deployment, partial apply, failed rollback, unreachable hosts and absent current build inputs.
 
-## Existing Baseline
+## Decision
 
-- `pp status` exists.
-- Local `.deploy/state.json` records current and previous release IDs.
-- Local `.deploy/releases/<release>/metadata.json` records release metadata, hosts, image bundles, migration state, apply state, rollback state, and smoke-check results.
-- `pp plan` prints the deploy env source without secret values.
+Should status contact the hosts by default?
 
-This ticket is not about adding another local-only status command. It is about making status trustworthy by comparing local desired state with observed host state over SSH.
-
-## Deliverables
-
-- SSH-observed `deploy status` implementation.
-- Observed-state model layered on top of the existing local metadata schema.
-- SSH observed-state reader.
-- Tests for status formatting and mismatch detection.
-
-## Acceptance Criteria
-
-- Status works without starting a deployment.
-- Missing/unreachable SSH hosts are clearly shown per host.
-- Desired/observed mismatches are called out.
-- Previous release data is available for rollback.
-- Migration and DB rollback state are visible in status output.
-- Smoke-check results are visible in status output.
-- Status reports at least:
-  - local current/previous release
-  - remote containers by `pp.project`
-  - container release labels
-  - container health/status
-  - image tags
-  - Caddy route digest/presence
-  - disk usage for release and persistent data paths
-  - allocated backend ports from `/etc/pp/ports.tsv`
+Default: yes, with bounded SSH calls and explicit per-host errors; label local records separately from observed state.

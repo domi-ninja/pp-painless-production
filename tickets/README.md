@@ -1,30 +1,29 @@
-# Deployment Pipeline Tickets
+# pp implementation tickets
 
-Numbered implementation tickets for the side-project deployment pipeline.
+Work through this list in order. Completed tickets move to `done/`, with one implementation commit per ticket.
 
 ## Open
 
-1. [011 - Implement SSH-Observed Status And Deployment Records](011-implement-status-and-deployment-records.md)
-2. [012 - Implement Rollback](012-implement-rollback.md)
-3. [013 - Wire End-To-End Example Project](013-wire-end-to-end-example-project.md)
+- [015 - scope hook identity ](015-scope-hook-identity.md)
+- [016 - protect secret inputs and output ](016-protect-secret-inputs-and-output.md)
+- [017 - update toolchain and security guide ](017-update-toolchain-and-security-guide.md)
+- [012 - implement rollback ](012-implement-rollback.md)
+- [018 - define recovery and readiness ](018-define-recovery-and-readiness.md)
+- [011 - implement status and deployment records ](011-implement-status-and-deployment-records.md)
+- [019 - reconcile routes and services ](019-reconcile-routes-and-services.md)
+- [020 - complete host permissions ](020-complete-host-permissions.md)
+- [021 - reconcile ssh and firewall ](021-reconcile-ssh-and-firewall.md)
+- [022 - make storage changes recoverable ](022-make-storage-changes-recoverable.md)
+- [023 - reject unsupported config ](023-reject-unsupported-config.md)
+- [024 - render volumes and builds ](024-render-volumes-and-builds.md)
+- [025 - resolve ports and templates ](025-resolve-ports-and-templates.md)
+- [026 - improve starter plan and help ](026-improve-starter-plan-and-help.md)
+- [027 - repair convex bootstrap ](027-repair-convex-bootstrap.md)
+- [028 - make examples maintainable ](028-make-examples-maintainable.md)
+- [029 - remove unrelated operations ](029-remove-unrelated-operations.md)
+- [030 - consolidate docs and ci ](030-consolidate-docs-and-ci.md)
+- [031 - simplify execution code ](031-simplify-execution-code.md)
 
-## Done
+## Earlier work
 
-1. [001 - Lock Deploy Config Schema](done/001-lock-deploy-config-schema.md)
-2. [002 - Scaffold Monorepo Deploy CLI](done/002-scaffold-monorepo-deploy-cli.md)
-3. [003 - Parse, Validate, And Render Config](done/003-parse-validate-render-config.md)
-4. [004 - Render Per-Host Compose Bundles](done/004-render-per-host-compose-bundles.md)
-5. [005 - Build And Tag Local Images](done/005-build-and-tag-local-images.md)
-6. [006 - Transfer Images And Bundles Over SSH](done/006-transfer-images-and-bundles-over-ssh.md)
-7. [009 - Apply Compose Releases On Hosts](done/009-apply-compose-releases-on-hosts.md)
-8. [014 - Allocate Project Backend Ports](done/014-allocate-project-backend-ports.md)
-9. [010 - Run Prod Migrations And Smoke Checks](done/010-run-prod-migrations-and-smoke-checks.md)
-
-## Dropped
-
-1. [007 - Build Go Host Agent MVP](dropped/007-build-go-host-agent-mvp.md)
-2. [008 - Install Host Agent With Ansible](dropped/008-install-host-agent-with-ansible.md)
-
-## Ticket Format
-
-Each ticket defines scope, dependencies, deliverables, and acceptance criteria. Keep tickets small enough that one ticket can become one branch or PR.
+Completed tickets are in [done/](done/). Abandoned designs are in [dropped/](dropped/). Ticket 013 is historical application-specific work and will be relocated during ticket 029.
