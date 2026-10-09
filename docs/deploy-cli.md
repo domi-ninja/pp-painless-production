@@ -36,7 +36,7 @@ For systemd deployment jobs, explicitly set `User=` so the service gets its logi
 
 ## Environment isolation
 
-Service `env.required` lists the keys injected from `env.source`, as well as validating their presence. Declare every key the service needs. A source without a key list is rejected unless you explicitly set `env.include_all: true`. This restriction applies to service env files, not build or operator-run hook inputs.
+Service `env.required` lists the keys injected from `env.source`, as well as validating their presence. Declare every key the service needs. A source without a key list is rejected unless you explicitly set `env.include_all: true`. The same key-selection rule applies to hooks, command checks and migrations. Child processes still inherit operator tool settings. Build arguments and route templates must contain public configuration; use protected runtime env files for secrets.
 
 Each deployment belongs to a project and environment. Commands accept `--config` after the command name; paths inside the config remain relative to the working directory.
 

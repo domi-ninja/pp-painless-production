@@ -99,6 +99,9 @@ func slugify(value string) string {
 }
 
 func ensureIgnoreEntry(root string, fileName string, entry string) error {
+	if err := noSymlinkPath(root, fileName); err != nil {
+		return err
+	}
 	path := filepath.Join(root, fileName)
 	body, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {

@@ -54,6 +54,15 @@ func upgradeRelease(record *ReleaseRecord) error {
 // Keep legacy bundles in place. Copy only metadata into an atomically published
 // namespace, leaving the original state and artifacts available for recovery.
 func migrateState(root string, selected Project) error {
+	if err := noSymlinkPath(root, ".deploy"); err != nil {
+		return err
+	}
+	if err := noSymlinkPath(root, ".deploy/.state.lock"); err != nil {
+		return err
+	}
+	if err := noSymlinkPath(root, filepath.Join(".deploy", selected.Name, selected.Environment)); err != nil {
+		return err
+	}
 	base := filepath.Join(root, ".deploy")
 	if err := os.MkdirAll(base, 0700); err != nil {
 		return err

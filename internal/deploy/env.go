@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -51,4 +53,46 @@ func trimEnvQuotes(value string) string {
 		return value[1 : len(value)-1]
 	}
 	return value
+}
+
+// Load only declared file values; operator tool settings remain in the process environment.
+func loadSelectedEnv(root string, spec EnvSpec) (map[string]string, error) {
+	if spec.Source == "" {
+		return map[string]string{}, nil
+	}
+	values, err := LoadEnvFile(filepath.Join(root, spec.Source))
+	if err != nil {
+		return nil, err
+	}
+	if len(spec.Required) == 0 && !spec.IncludeAll {
+		return nil, fmt.Errorf("env.required must list injected keys, or set include_all: true")
+	}
+	selected := map[string]string{}
+	for _, key := range spec.Required {
+		value, ok := values[key]
+		if !ok || value == "" {
+			return nil, fmt.Errorf("missing or empty required env key %s", key)
+		}
+		selected[key] = value
+	}
+	if spec.IncludeAll {
+		return values, nil
+	}
+	return selected, nil
+}
+
+func encodeEnv(values map[string]string) ([]byte, error) {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var body strings.Builder
+	for _, key := range keys {
+		if strings.ContainsAny(key, "=\r\n") || strings.ContainsAny(values[key], "\r\n") {
+			return nil, fmt.Errorf("unsupported multiline env key or value")
+		}
+		body.WriteString(key + "=" + values[key] + "\n")
+	}
+	return []byte(body.String()), nil
 }

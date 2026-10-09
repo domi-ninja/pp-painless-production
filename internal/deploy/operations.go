@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -249,10 +250,14 @@ func (d Deployer) RunMigrationRecord(plan Plan, rollback bool) (StepRecord, erro
 	if rollback {
 		command = migration.RollbackCommand
 	}
+	recordedCommand := []string{}
+	if len(command) > 0 {
+		recordedCommand = command[:1]
+	}
 	record := StepRecord{
 		Status:      "running",
 		StartedAt:   time.Now().UTC(),
-		Command:     append([]string(nil), command...),
+		Command:     append([]string(nil), recordedCommand...),
 		Image:       image,
 		EnvSource:   migration.Env.Source,
 		RestorePlan: migration.RestorePlan,
@@ -283,7 +288,27 @@ func (d Deployer) runMigration(migration *Migration, image string, rollback bool
 
 	args := []string{"run", "--rm", "--pull", "never"}
 	if migration.Env.Source != "" {
-		args = append(args, "--env-file", filepath.Join(d.Root, migration.Env.Source))
+		values, err := loadSelectedEnv(d.Root, migration.Env)
+		if err != nil {
+			return err
+		}
+		body, err := encodeEnv(values)
+		if err != nil {
+			return err
+		}
+		file, err := os.CreateTemp("", "pp-migration-env-")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(file.Name())
+		if _, err := file.Write(body); err != nil {
+			file.Close()
+			return err
+		}
+		if err := file.Close(); err != nil {
+			return err
+		}
+		args = append(args, "--env-file", file.Name())
 	}
 	args = append(args, image)
 	args = append(args, command...)
@@ -467,7 +492,7 @@ func (d Deployer) RunHooks(plan Plan, phase string) error {
 		fmt.Fprintf(d.Out, "hook %s: %s\n", phase, hook.Name)
 		env := map[string]string{}
 		if hook.Env.Source != "" {
-			values, err := LoadEnvFile(filepath.Join(d.Root, hook.Env.Source))
+			values, err := loadSelectedEnv(d.Root, hook.Env)
 			if err != nil {
 				return fmt.Errorf("hook %s env: %w", hook.Name, err)
 			}
@@ -519,17 +544,17 @@ func (d Deployer) RunCheck(plan Plan, group string, check Check) (CheckRecord, e
 	}
 	if check.URL != "" {
 		record.Type = "http"
-		record.Target = check.URL
+		record.Target = safeCheckURL(check.URL)
 		record.ExpectedStatus = expectedStatus(check)
 		record.FollowRedirects = checkFollowsRedirects(check)
-		fmt.Fprintf(d.Out, "check %s: %s\n", check.Name, check.URL)
+		fmt.Fprintf(d.Out, "check %s: %s\n", check.Name, record.Target)
 		err := d.runHTTPCheck(check, &record)
 		finishCheckRecord(&record, err)
 		return record, err
 	}
 
 	record.Type = "command"
-	record.Target = strings.Join(check.Command, " ")
+	record.Target = check.Command[0]
 	record.EnvSource = check.Env.Source
 	fmt.Fprintf(d.Out, "check %s: %s\n", check.Name, record.Target)
 	err := d.runCommandCheck(check)
@@ -546,7 +571,7 @@ func (d Deployer) runHTTPCheck(check Check, record *CheckRecord) error {
 	}
 	resp, err := client.Get(check.URL)
 	if err != nil {
-		return fmt.Errorf("check %s: %w", check.Name, err)
+		return fmt.Errorf("check %s: HTTP request failed", check.Name)
 	}
 	_ = resp.Body.Close()
 	record.ActualStatus = resp.StatusCode
@@ -560,7 +585,7 @@ func (d Deployer) runHTTPCheck(check Check, record *CheckRecord) error {
 func (d Deployer) runCommandCheck(check Check) error {
 	env := map[string]string{}
 	if check.Env.Source != "" {
-		values, err := LoadEnvFile(filepath.Join(d.Root, check.Env.Source))
+		values, err := loadSelectedEnv(d.Root, check.Env)
 		if err != nil {
 			return fmt.Errorf("check %s env: %w", check.Name, err)
 		}
@@ -986,4 +1011,15 @@ func (d Deployer) configPath() string {
 		return "deploy.yml"
 	}
 	return d.ConfigPath
+}
+
+func safeCheckURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "invalid URL"
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
 }

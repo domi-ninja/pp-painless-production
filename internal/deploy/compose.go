@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -382,44 +381,16 @@ func renderServiceEnv(root string, envDir string, serviceID string, env EnvSpec)
 	if env.Source == "" {
 		return "", nil
 	}
-	values, err := LoadEnvFile(filepath.Join(root, env.Source))
+	values, err := loadSelectedEnv(root, env)
 	if err != nil {
-		return "", fmt.Errorf("load env for %s: %w", serviceID, err)
+		return "", fmt.Errorf("env for %s: %w", serviceID, err)
 	}
-	selected := map[string]bool{}
-	for _, key := range env.Required {
-		if _, ok := values[key]; !ok {
-			return "", fmt.Errorf("env for %s is missing required key %s", serviceID, key)
-		}
-		selected[key] = true
+	body, err := encodeEnv(values)
+	if err != nil {
+		return "", err
 	}
-	if env.IncludeAll {
-		for key := range values {
-			selected[key] = true
-		}
-	}
-	if len(selected) == 0 {
-		return "", fmt.Errorf("env for %s must list required keys or explicitly set include_all: true", serviceID)
-	}
-	keys := make([]string, 0, len(selected))
-	for key := range selected {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	var body strings.Builder
-	for _, key := range keys {
-		body.WriteString(key)
-		body.WriteByte('=')
-		if strings.ContainsAny(key, "=\r\n") || strings.ContainsAny(values[key], "\r\n") {
-			return "", fmt.Errorf("env for %s contains an unsupported multiline key or value", serviceID)
-		}
-		body.WriteString(values[key])
-		body.WriteByte('\n')
-	}
-
 	path := filepath.Join(envDir, serviceID+".env")
-	if err := os.WriteFile(path, []byte(body.String()), 0600); err != nil {
+	if err := os.WriteFile(path, body, 0600); err != nil {
 		return "", fmt.Errorf("write env file for %s: %w", serviceID, err)
 	}
 	return path, nil

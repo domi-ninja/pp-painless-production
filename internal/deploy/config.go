@@ -508,6 +508,9 @@ func validateRouteTarget(rawURL string) error {
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return fmt.Errorf("must use http or https")
 	}
+	if parsed.User != nil {
+		return fmt.Errorf("must not contain credentials; use a command check with env inputs")
+	}
 	if parsed.Host == "" {
 		return fmt.Errorf("must include host")
 	}

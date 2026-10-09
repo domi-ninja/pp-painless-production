@@ -43,7 +43,7 @@ func (r Runner) Run(dir string, name string, args ...string) error {
 	cmd.Stdout = r.Stdout
 	cmd.Stderr = r.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
+		return fmt.Errorf("%s failed: %w", name, err)
 	}
 	return nil
 }
@@ -67,9 +67,9 @@ func (r Runner) RunEnvContext(ctx context.Context, dir string, env map[string]st
 	}
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), ctx.Err())
+			return fmt.Errorf("%s failed: %w", name, ctx.Err())
 		}
-		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
+		return fmt.Errorf("%s failed: %w", name, err)
 	}
 	return nil
 }
@@ -79,7 +79,7 @@ func (r Runner) Output(dir string, name string, args ...string) (string, error) 
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("%s failed: %w", name, err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
