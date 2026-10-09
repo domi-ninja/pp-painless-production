@@ -190,6 +190,9 @@ func (d Deployer) Deploy() (result error) {
 }
 
 func (d Deployer) BuildImages(plan Plan, bundle Bundle) (result error) {
+	if len(bundle.Images) == 0 {
+		return nil
+	}
 	builder, unlock, err := d.prepareBuilder(true)
 	if err != nil {
 		return err

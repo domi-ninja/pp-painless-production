@@ -171,7 +171,6 @@ services:
 route_files:
   - source: deploy/caddy/convex-website.caddy.tmpl
     host: server
-    dest_name: convex-website.caddy
 
 hooks:
   after_backend_healthy:

@@ -180,7 +180,7 @@ func TestAdoptedDeployAndRollbackKeepResourceIdentity(t *testing.T) {
 	writeFile(t, root, "Dockerfile", "FROM scratch\n")
 	project := legacyFixture(t, root)
 	cfg := Config{
-		Version: 1, Project: project, Build: Build{Context: ".", Dockerfile: "Dockerfile"},
+		Version: 1, Project: project, Build: Build{Context: ".", Dockerfile: "Dockerfile", Tags: []string{"shop:latest"}},
 		Hosts:    map[string]Host{"host": {SSH: "unused"}},
 		Services: map[string]Service{"web": {Image: "shop:latest", Hosts: []string{"host"}}},
 	}

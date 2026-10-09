@@ -226,7 +226,7 @@ func TestRenderBundleSupportsConvexStyleExtensions(t *testing.T) {
 		"image: humanist-design-web:20260628T100000Z-abcdef1",
 		"- 127.0.0.1:18001:80",
 		"- 127.0.0.1:18002:3210",
-		"- /data/pp/humanist-design/s3:/data",
+		"source: /data/pp/humanist-design/s3",
 		"MINIO_BROWSER_REDIRECT_URL: https://humanist.design",
 	} {
 		if !strings.Contains(composeText, wanted) {

@@ -135,6 +135,9 @@ func (d Deployer) checkSpace(plan Plan) error {
 	if uint64(stat.Bavail)*uint64(stat.Bsize) < uint64(minimum) {
 		return fmt.Errorf("less than %d MiB free locally; run pp cleanup or free disk space", minimum/(1024*1024))
 	}
+	if !hasLegacyBuild(plan.Config) && len(plan.Config.Builds) == 0 && plan.Config.Migrations == nil {
+		return nil
+	}
 	// Docker Desktop's data root is inside its VM, not on the client filesystem.
 	return d.Runner.Run(d.Root, "sh", "-c", "set -eu; docker_root=$(docker info --format '{{.DockerRootDir}}'); if [ -d \"$docker_root\" ]; then\n"+spaceScript("$docker_root", minimum)+"\nfi")
 }

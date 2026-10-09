@@ -25,9 +25,20 @@ type ComposeService struct {
 	Ports       []string          `yaml:"ports,omitempty"`
 	EnvFile     []ComposeEnvFile  `yaml:"env_file,omitempty"`
 	Environment map[string]string `yaml:"environment,omitempty"`
-	Volumes     []string          `yaml:"volumes,omitempty"`
+	Volumes     []ComposeMount    `yaml:"volumes,omitempty"`
 	Labels      map[string]string `yaml:"labels,omitempty"`
 	Healthcheck *Healthcheck      `yaml:"healthcheck,omitempty"`
+}
+
+type ComposeMount struct {
+	Type     string       `yaml:"type"`
+	Source   string       `yaml:"source"`
+	Target   string       `yaml:"target"`
+	ReadOnly bool         `yaml:"read_only,omitempty"`
+	Bind     *ComposeBind `yaml:"bind,omitempty"`
+}
+type ComposeBind struct {
+	CreateHostPath bool `yaml:"create_host_path"`
 }
 
 type Healthcheck struct {
@@ -79,6 +90,9 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 	envValues, err := loadConfigEnv(root, plan.Config.Env)
 	if err != nil {
 		return Bundle{}, err
+	}
+	if problems := buildImageProblems(plan, envValues); len(problems) > 0 {
+		return Bundle{}, ValidationError{Problems: problems}
 	}
 	bundleRoot := filepath.Join(plan.Config.Project.localDir(root), "releases", plan.ReleaseID)
 	if err := os.MkdirAll(filepath.Dir(bundleRoot), 0700); err != nil {
@@ -142,9 +156,10 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 				pullServices = append(pullServices, serviceID)
 			}
 			for _, mount := range service.Volumes {
-				if mount.Name != "" {
-					volume := plan.Config.Volumes[mount.Name]
-					compose.Volumes[mount.Name] = ComposeVolume{
+				if mountKind(mount) == "volume" {
+					source := mountSource(mount)
+					volume := plan.Config.Volumes[source]
+					compose.Volumes[source] = ComposeVolume{
 						Driver:   volume.Driver,
 						External: volume.External,
 					}
@@ -184,13 +199,12 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 }
 
 func renderImageBundles(imagesDir string, plan Plan, envValues map[string]string) []ImageBundle {
-	vars := VarsForPlan(plan)
 	if len(plan.Config.Builds) == 0 {
-		build := plan.Config.Build
-		tags := RenderTemplates(build.Tags, vars)
-		if len(tags) == 0 {
-			tags = []string{fmt.Sprintf("%s:%s", plan.Config.Project.Name, plan.Git.SHA)}
+		if !hasLegacyBuild(plan.Config) {
+			return nil
 		}
+		build := plan.Config.Build
+		tags := buildTags(plan, "default", build, envValues)
 		return []ImageBundle{{
 			ID:    "default",
 			Tar:   filepath.Join(imagesDir, plan.Config.Project.Name+"-"+plan.ReleaseID+".tar"),
@@ -206,13 +220,7 @@ func renderImageBundles(imagesDir string, plan Plan, envValues map[string]string
 			continue
 		}
 		build := plan.Config.Builds[service.Build]
-		tags := make([]string, 0, len(build.Tags))
-		for _, tag := range build.Tags {
-			tags = append(tags, RenderValue(tag, plan, "", envValues))
-		}
-		if len(tags) == 0 {
-			tags = []string{fmt.Sprintf("%s-%s:%s", plan.Config.Project.Name, service.Build, plan.Git.SHA)}
-		}
+		tags := buildTags(plan, service.Build, build, envValues)
 		out = append(out, ImageBundle{
 			ID:    service.Build,
 			Tar:   filepath.Join(imagesDir, plan.Config.Project.Name+"-"+service.Build+"-"+plan.ReleaseID+".tar"),
@@ -421,18 +429,29 @@ func renderPorts(plan Plan, hostID string, serviceID string, ports []Port) []str
 	return out
 }
 
-func renderVolumeMounts(mounts []VolumeMount) []string {
-	out := make([]string, 0, len(mounts))
+func mountKind(mount VolumeMount) string {
+	if mount.Type != "" {
+		return mount.Type
+	}
+	if mount.Name != "" {
+		return "volume"
+	}
+	return "bind"
+}
+func mountSource(mount VolumeMount) string {
+	if mount.Name != "" {
+		return mount.Name
+	}
+	return mount.Source
+}
+func renderVolumeMounts(mounts []VolumeMount) []ComposeMount {
+	out := make([]ComposeMount, 0, len(mounts))
 	for _, mount := range mounts {
-		source := mount.Name
-		if mount.Source != "" {
-			source = mount.Source
+		item := ComposeMount{Type: mountKind(mount), Source: mountSource(mount), Target: mount.Target, ReadOnly: mount.ReadOnly}
+		if item.Type == "bind" {
+			item.Bind = &ComposeBind{CreateHostPath: false}
 		}
-		value := source + ":" + mount.Target
-		if mount.ReadOnly {
-			value += ":ro"
-		}
-		out = append(out, value)
+		out = append(out, item)
 	}
 	return out
 }

@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [024 - render volumes and builds ](024-render-volumes-and-builds.md)
 - [025 - resolve ports and templates ](025-resolve-ports-and-templates.md)
 - [026 - improve starter plan and help ](026-improve-starter-plan-and-help.md)
 - [027 - repair convex bootstrap ](027-repair-convex-bootstrap.md)
@@ -34,6 +33,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [Completed 022](done/022-make-storage-changes-recoverable.md)
 
 - [Completed 023](done/023-reject-unsupported-config.md)
+
+- [Completed 024](done/024-render-volumes-and-builds.md)
 
 ## Earlier work
 

@@ -77,9 +77,8 @@ type Route struct {
 }
 
 type RouteFile struct {
-	Source   string `yaml:"source"`
-	Host     string `yaml:"host"`
-	DestName string `yaml:"dest_name"`
+	Source string `yaml:"source"`
+	Host   string `yaml:"host"`
 }
 
 type EnvSpec struct {
@@ -246,7 +245,7 @@ func ValidateConfig(root string, cfg Config) error {
 	validateSlug(&problems, "project.name", cfg.Project.Name)
 	validateSlug(&problems, "project.environment", cfg.Project.Environment)
 	validateEnv(&problems, root, "env", cfg.Env)
-	if len(cfg.Builds) == 0 {
+	if len(cfg.Builds) == 0 && hasLegacyBuild(cfg) {
 		require(&problems, "build.context", cfg.Build.Context)
 		require(&problems, "build.dockerfile", cfg.Build.Dockerfile)
 		validateBuild(&problems, "build", cfg.Build)
@@ -290,7 +289,7 @@ func ValidateConfig(root string, cfg Config) error {
 		validateSlug(&problems, "services."+serviceID, serviceID)
 		require(&problems, "services."+serviceID+".image", service.Image)
 		if service.Build != "" {
-			if _, ok := cfg.Builds[service.Build]; len(cfg.Builds) > 0 && !ok {
+			if _, ok := cfg.Builds[service.Build]; (len(cfg.Builds) > 0 && !ok) || (len(cfg.Builds) == 0 && (service.Build != "default" || !hasLegacyBuild(cfg))) {
 				problems = append(problems, "services."+serviceID+".build references unknown build "+service.Build)
 			}
 		}
@@ -348,21 +347,23 @@ func ValidateConfig(root string, cfg Config) error {
 			validateEnvName(&problems, "services."+serviceID+".command_env", key)
 		}
 		for _, mount := range service.Volumes {
-			if mount.Target == "" {
-				problems = append(problems, "services."+serviceID+".volumes.target is required")
-				continue
+			field := "services." + serviceID + ".volumes"
+			if !filepath.IsAbs(mount.Target) {
+				problems = append(problems, field+".target must be an absolute container path")
 			}
-			if mount.Name == "" && mount.Source == "" {
-				problems = append(problems, "services."+serviceID+".volumes.name or source is required")
-				continue
+			if (mount.Name == "") == (mount.Source == "") {
+				problems = append(problems, field+" must declare exactly one of name or source")
 			}
-			if mount.Name != "" {
-				if _, ok := cfg.Volumes[mount.Name]; !ok {
-					problems = append(problems, "services."+serviceID+".volumes references unknown volume "+mount.Name)
+			kind := mountKind(mount)
+			if kind != "bind" && kind != "volume" {
+				problems = append(problems, field+".type must be bind or volume")
+			}
+			if kind == "bind" {
+				if mount.Name != "" || !filepath.IsAbs(mount.Source) {
+					problems = append(problems, field+" bind mounts need an absolute host source")
 				}
-			}
-			if mount.Type != "" && mount.Type != "bind" && mount.Type != "volume" {
-				problems = append(problems, "services."+serviceID+".volumes.type must be bind or volume")
+			} else if _, ok := cfg.Volumes[mountSource(mount)]; !ok {
+				problems = append(problems, field+" references unknown volume "+mountSource(mount))
 			}
 		}
 	}
@@ -439,6 +440,10 @@ func ValidateConfig(root string, cfg Config) error {
 		for i, check := range checks {
 			validateCheck(&problems, root, fmt.Sprintf("checks.%s[%d]", group, i), check)
 		}
+	}
+
+	if values, err := loadConfigEnv(root, cfg.Env); err == nil {
+		problems = append(problems, buildImageProblems(Plan{Config: cfg, Git: GitMetadata{SHA: "validation", ShortSHA: "valid"}, ReleaseID: "validation"}, values)...)
 	}
 
 	if len(problems) > 0 {

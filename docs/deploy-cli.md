@@ -152,3 +152,11 @@ Unknown YAML fields, including nested fields, fail validation. pp supports servi
 Build contexts must be existing directories and Dockerfiles must be regular files inside the app repository. Each build supports one platform, `linux/amd64` or `linux/arm64`, because pp loads and transfers local images. Ports must be between 1 and 65535, and `host_ip` must be an IP address. Required env values must exist and be nonempty. Timeouts accept 0 for the default or 1 to 86400 seconds.
 
 Host roles are descriptive labels. They do not grant permissions or enforce network policy. pp rejects CI and Git-hosting placement labels and checks the host's CI marker before deployment; run those services on separate hosts.
+
+## Built images and mounts
+
+A built service's `image` must match a tag from its selected build. Built images cannot use an upstream pull policy. Upstream-only deployments can omit `build` and `builds`; pp skips builder setup and does not require a local Docker daemon unless it runs a migration.
+
+Mounts use explicit Compose long syntax. A declared `name` defaults to a named volume; a host `source` defaults to a bind mount. Bind sources must be absolute host paths and must already exist. pp sets `create_host_path: false` so a typo cannot create an empty data directory. Named volumes must appear in the top-level `volumes` map. Set `read_only: true` for either type when needed.
+
+Route templates for a host are combined into one deployment-owned route file. Remove the former `dest_name` field; it never selected the destination.
