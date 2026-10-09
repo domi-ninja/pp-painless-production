@@ -2,34 +2,9 @@
 
 set -euo pipefail
 
-ENV_FILE="${ENV_FILE:-.env.local}"
-SSH_TARGET="${PP_HOST:-$(awk '$1 == "ssh:" { print $2; exit }' deploy.yml)}"
-PROJECT="${PP_PROJECT:-}"
-
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "Error: $ENV_FILE file not found" >&2
-  exit 1
-fi
-
-if [[ -z "$PROJECT" ]]; then
-  PROJECT="$({
-    awk '
-      $1 == "project:" { in_project=1; next }
-      in_project && $1 == "name:" {
-        value=$2
-        gsub(/^["'\'']|["'\'']$/, "", value)
-        print value
-        exit
-      }
-      in_project && $1 !~ /^ / && $1 != "" { in_project=0 }
-    ' deploy.yml
-  })"
-fi
-
-if [[ -z "$PROJECT" ]]; then
-  echo "Error: could not determine project name from PP_PROJECT or deploy.yml" >&2
-  exit 1
-fi
+source "$(dirname "${BASH_SOURCE[0]}")/pp-context.sh"
+[[ -f "$ENV_FILE" ]] || { echo "Missing selected environment file" >&2; exit 1; }
+s3_container="$(pp_container s3)"
 
 bucket_keys=(
   S3_STORAGE_EXPORTS_BUCKET
@@ -50,13 +25,8 @@ for name in "${bucket_keys[@]}"; do
 done
 
 remote_script='set -euo pipefail
-project="$1"
+s3_container="$1"
 shift
-s3_container="$(docker ps --filter "label=pp.project=$project" --filter "label=pp.service=s3" --format "{{.Names}}" | head -n 1)"
-if [ -z "$s3_container" ]; then
-  echo "Error: no running s3 container found for pp.project=$project" >&2
-  exit 1
-fi
 network="$(docker inspect "$s3_container" --format "{{.HostConfig.NetworkMode}}")"
 access_key="$(docker inspect "$s3_container" --format "{{range .Config.Env}}{{println .}}{{end}}" | sed -n "s/^MINIO_ROOT_USER=//p" | tail -n 1)"
 secret_key="$(docker inspect "$s3_container" --format "{{range .Config.Env}}{{println .}}{{end}}" | sed -n "s/^MINIO_ROOT_PASSWORD=//p" | tail -n 1)"
@@ -75,7 +45,7 @@ docker run --rm -i --network "$network" --entrypoint /bin/sh minio/mc:latest -eu
   done
 '\'' sh "$@"'
 
-remote_args=("$PROJECT" "${buckets[@]}")
+remote_args=("$s3_container" "${buckets[@]}")
 escaped_args=()
 for value in "${remote_args[@]}"; do
   escaped_args+=("$(printf '%q' "$value")")

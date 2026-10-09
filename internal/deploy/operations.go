@@ -473,6 +473,16 @@ func (d Deployer) RunHooks(plan Plan, phase string) error {
 			}
 			env = values
 		}
+		env["PP_PROJECT"] = plan.Config.Project.Name
+		env["PP_ENVIRONMENT"] = plan.Config.Project.Environment
+		env["PP_CONFIG"] = d.configPath()
+		env["PP_ENV_FILE"] = hook.Env.Source
+		env["PP_HOST"] = ""
+		if len(plan.Config.Hosts) == 1 {
+			for _, host := range plan.Config.Hosts {
+				env["PP_HOST"] = host.SSH
+			}
+		}
 		ctx, cancel := optionalTimeoutContext(hook.TimeoutSeconds)
 		err := d.Runner.RunEnvContext(ctx, d.Root, env, hook.Run[0], hook.Run[1:]...)
 		cancel()

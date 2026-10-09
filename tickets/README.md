@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [015 - scope hook identity ](015-scope-hook-identity.md)
 - [016 - protect secret inputs and output ](016-protect-secret-inputs-and-output.md)
 - [017 - update toolchain and security guide ](017-update-toolchain-and-security-guide.md)
 - [012 - implement rollback ](012-implement-rollback.md)
@@ -23,6 +22,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [029 - remove unrelated operations ](029-remove-unrelated-operations.md)
 - [030 - consolidate docs and ci ](030-consolidate-docs-and-ci.md)
 - [031 - simplify execution code ](031-simplify-execution-code.md)
+
+- [Completed 015](done/015-scope-hook-identity.md)
 
 ## Earlier work
 

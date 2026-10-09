@@ -2,35 +2,9 @@
 
 set -euo pipefail
 
-ENV_FILE="${ENV_FILE:-.env.local}"
-SSH_TARGET="${PP_HOST:-$(awk '$1 == "ssh:" { print $2; exit }' deploy.yml)}"
-PROJECT="${PP_PROJECT:-}"
+source "$(dirname "${BASH_SOURCE[0]}")/pp-context.sh"
 SERVICE="${PP_SERVICE:-convex-backend}"
-
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "Error: $ENV_FILE file not found. Run scripts/bootstrap-prod-env.sh first." >&2
-  exit 1
-fi
-
-if [[ -z "$PROJECT" ]]; then
-  PROJECT="$(
-    awk '
-      $1 == "project:" { in_project=1; next }
-      in_project && $1 == "name:" {
-        value=$2
-        gsub(/^["'\'']|["'\'']$/, "", value)
-        print value
-        exit
-      }
-      in_project && $1 !~ /^ / && $1 != "" { in_project=0 }
-    ' deploy.yml
-  )"
-fi
-
-if [[ -z "$PROJECT" ]]; then
-  echo "Error: could not determine project name from PP_PROJECT or deploy.yml" >&2
-  exit 1
-fi
+[[ -f "$ENV_FILE" ]] || { echo "Missing selected environment file" >&2; exit 1; }
 
 get_env() {
   local key="$1"
@@ -45,15 +19,7 @@ get_env() {
   printf '%s' "$value"
 }
 
-container="$(
-  ssh "$SSH_TARGET" \
-    "docker ps --filter label=pp.project=$PROJECT --filter label=pp.service=$SERVICE --format '{{.Names}}' | head -n 1"
-)"
-
-if [[ -z "$container" ]]; then
-  echo "Error: no running $SERVICE container found for pp.project=$PROJECT on $SSH_TARGET" >&2
-  exit 1
-fi
+container="$(pp_container "$SERVICE")"
 
 admin_key="$(
   ssh "$SSH_TARGET" "docker exec $(printf '%q' "$container") /convex/generate_admin_key.sh | tail -n 1"
