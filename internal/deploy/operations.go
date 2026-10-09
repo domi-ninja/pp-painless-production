@@ -67,6 +67,9 @@ func (d Deployer) Deploy() (result error) {
 		return err
 	}
 	defer unlockHosts()
+	if err := d.checkRemovedHosts(plan, state); err != nil {
+		return err
+	}
 	d.minFreeMB = plan.Config.Retention.defaults().MinFreeMB
 	defer func() {
 		if err := d.cleanup(plan, false); err != nil {
@@ -429,6 +432,9 @@ func (d Deployer) UploadLoadPull(plan Plan, bundle Bundle) error {
 func (d Deployer) ComposeUpPhase(plan Plan, bundle Bundle, phases []string, wait bool) error {
 	for _, host := range bundle.Hosts {
 		services := servicesForPhases(plan, host.ServiceIDs, phases)
+		if phases == nil {
+			services = nil
+		}
 		if phases != nil && len(services) == 0 {
 			continue
 		}
@@ -488,6 +494,9 @@ func (d Deployer) ComposeUp(plan Plan, host HostBundle, services []string, wait 
 	}
 	if len(services) > 0 {
 		args[0] += " " + shellJoin(services)
+	}
+	if len(services) == 0 {
+		args[0] += " --remove-orphans"
 	}
 	composeCmd := "cd " + shellQuote(host.RemoteDir) + " && " + args[0]
 	if d.onHostStep != nil {
@@ -727,23 +736,6 @@ func (d Deployer) UploadHostBundle(host HostBundle, images []ImageBundle) error 
 	return d.Remote(host.SSH, "chmod 0600 "+shellJoin(files))
 }
 
-func (d Deployer) ApplyRoutes(plan Plan, bundle Bundle) error {
-	for _, host := range bundle.Hosts {
-		if host.Routes == "" {
-			continue
-		}
-		fmt.Fprintf(d.Out, "host %s: caddy route\n", host.ID)
-		routePath := plan.Config.Project.routePath()
-		command := "mkdir -p /etc/pp/proxy/routes && install -m 0644 " +
-			shellQuote(host.RemoteDir+"/routes.caddy") + " " + shellQuote(routePath) +
-			" && caddy reload --config /etc/caddy/Caddyfile"
-		if err := d.Remote(host.SSH, command); err != nil {
-			return fmt.Errorf("host %s caddy reload: %w", host.ID, err)
-		}
-	}
-	return nil
-}
-
 func (d Deployer) Remote(sshTarget string, command string) error {
 	if err := validateSSHTarget(sshTarget); err != nil {
 		return err
@@ -764,12 +756,29 @@ func (d Deployer) Down() error {
 		return err
 	}
 	defer unlock()
-	plan, err := LoadPlanContext(d.Runner.context(), d.Root, d.configPath())
+	plan, err := d.cleanupPlan()
 	if err != nil {
 		return err
 	}
-	if _, err := LoadState(d.Root, plan.Config.Project); err != nil {
+	state, err := LoadState(d.Root, plan.Config.Project)
+	if err != nil {
 		return err
+	}
+	targets := map[string]HostPlan{}
+	for _, id := range []string{state.CurrentReleaseID, attemptReleaseID(state)} {
+		if id == "" {
+			continue
+		}
+		record, err := LoadRelease(d.Root, plan.Config.Project, id)
+		if err != nil {
+			return err
+		}
+		for _, host := range record.Hosts {
+			targets[host.SSH] = HostPlan{ID: host.ID, SSH: host.SSH, Services: host.Services}
+		}
+	}
+	for _, item := range sortedMap(targets) {
+		plan.Hosts = append(plan.Hosts, item.Value)
 	}
 	if err := d.checkLegacyHosts(plan); err != nil {
 		return err
@@ -781,12 +790,13 @@ func (d Deployer) Down() error {
 	defer unlockHosts()
 
 	for _, host := range plan.Hosts {
-		if len(host.Services) == 0 {
-			continue
-		}
+
 		fmt.Fprintf(d.Out, "host %s: down %s\n", host.ID, plan.Config.Project.DeploymentID())
 		if err := d.Remote(host.SSH, downProjectContainersCommand(plan.Config.Project)); err != nil {
 			return fmt.Errorf("host %s down: %w", host.ID, err)
+		}
+		if err := d.Runner.SSHScript(d.Root, host.SSH, routeUpdateScript(plan.Config.Project.ResourceID(), "", "/etc/pp/proxy/routes", "/etc/caddy/Caddyfile")); err != nil {
+			return err
 		}
 	}
 	return nil

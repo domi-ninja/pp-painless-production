@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [019 - reconcile routes and services ](019-reconcile-routes-and-services.md)
 - [020 - complete host permissions ](020-complete-host-permissions.md)
 - [021 - reconcile ssh and firewall ](021-reconcile-ssh-and-firewall.md)
 - [022 - make storage changes recoverable ](022-make-storage-changes-recoverable.md)
@@ -29,6 +28,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [Completed 018](done/018-define-recovery-and-readiness.md)
 
 - [Completed 011](done/011-implement-status-and-deployment-records.md)
+
+- [Completed 019](done/019-reconcile-routes-and-services.md)
 
 ## Earlier work
 

@@ -118,7 +118,7 @@ func TestRemoteCommandsUseSelectedEnvironment(t *testing.T) {
 	log := filepath.Join(root, "commands")
 	t.Setenv("PP_TEST_COMMAND_LOG", log)
 	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
-	writeExecutable(t, root, "ssh", "#!/bin/sh\nprintf '%s\\n' \"$2\" >> \"$PP_TEST_COMMAND_LOG\"\ncase \"$2\" in *ports.tsv*) echo 18001;; esac\n")
+	writeExecutable(t, root, "ssh", "#!/bin/sh\nprintf '%s\\n' \"$2\" >> \"$PP_TEST_COMMAND_LOG\"\nif [ \"$2\" = 'sh -s' ]; then cat >> \"$PP_TEST_COMMAND_LOG\"; fi\ncase \"$2\" in *ports.tsv*) echo 18001;; esac\n")
 	var out bytes.Buffer
 	d := NewDeployer(root, &out, &out)
 	for _, project := range []Project{
@@ -145,7 +145,7 @@ func TestRemoteCommandsUseSelectedEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"key='shop_dev:web:80'", "key='shop_prod:web:80'", "key='shop:web:80'", "-p 'shop_dev'", "-p 'shop_prod'", "-p 'shop'", "up -d --pull never", "/routes/shop_dev.caddy", "/routes/shop_prod.caddy", "/routes/shop.caddy", "label=pp.environment=dev", "label=pp.environment=prod"} {
+	for _, want := range []string{"key='shop_dev:web:80'", "key='shop_prod:web:80'", "key='shop:web:80'", "-p 'shop_dev'", "-p 'shop_prod'", "-p 'shop'", "up -d --pull never", "name='shop_dev.caddy'", "name='shop_prod.caddy'", "name='shop.caddy'", "label=pp.environment=dev", "label=pp.environment=prod"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("missing %q in commands", want)
 		}

@@ -138,3 +138,9 @@ After a completed migration and failed apply, pp runs the saved database rollbac
 `pp status` prints the local current release and the latest deploy or rollback attempt separately. It also queries recorded hosts over SSH, with a 15 second limit per host, and prints container release labels, state and health. A host error returns a failing exit status. Compare observed services with the expected local release; local success metadata does not prove the host still runs that release.
 
 Status needs deployment identity and local records, not current env files, build inputs or Git history. Per-host apply progress remains in the attempted release even if another host fails. Recovery checks and failures are recorded separately from the original apply checks.
+
+## Routes and retired services
+
+pp stages the full shared Caddy configuration and validates it before replacing its own route file. A failed reload restores the old file and reloads the restored configuration. Caddy validation also rejects ambiguous site definitions. Keep the host's `import /etc/pp/proxy/routes/*.caddy` on its own line; use absolute paths for other imports.
+
+The final Compose apply removes retired services from the same deployment. It preserves data volumes. Removing a route removes it from that deployment's route file. Removing a host while it still has owned containers fails before building or migrating. Run `pp down` using that deployment's saved state first. Down reads saved hosts, removes owned containers and removes its routes; it does not delete volumes.
