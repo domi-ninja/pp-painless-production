@@ -7,3 +7,6 @@ infra/ansible/group_vars/*.vault.yml
 infra/ansible/host_vars/*.vault.yml
 *.retry
 scripts/.master-token
+
+bin/
+__pycache__/

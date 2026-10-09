@@ -76,7 +76,7 @@ cd /path/to/your-app
 pp init
 ```
 
-Skip `init` if the app already has `deploy.yml`. Edit the starter's SSH target, domain and container port, and replace its `true` health check with a real check. It assumes a Dockerfile and port 3000.
+Skip `init` if the app already has `deploy.yml`. Edit the starter's SSH target, domain and container port. Its health check calls `http://127.0.0.1:3000/health` inside the container, so match that endpoint to your app and include wget, or use a command available in your image. It assumes an existing Dockerfile.
 
 For a fuller starting point, choose a sample instead of the generated starter:
 

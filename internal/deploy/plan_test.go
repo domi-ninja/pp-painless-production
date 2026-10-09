@@ -34,3 +34,23 @@ func TestBuildPlanUsesTimestampPlusSHAReleaseID(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanShowsOperationInputsWithoutSecretValues(t *testing.T) {
+	cfg := validConfig()
+	cfg.Build.Args = map[string]string{"PUBLIC_URL": "https://example.com"}
+	web := cfg.Services["web"]
+	web.Environment = map[string]string{"SECRET": "synthetic-secret"}
+	web.Volumes = []VolumeMount{{Name: "data", Target: "/data"}}
+	cfg.Services["web"] = web
+	plan := BuildPlan(cfg, GitMetadata{SHA: "revision"}, time.Now())
+	var out bytes.Buffer
+	PrintPlan(&out, plan)
+	for _, want := range []string{"services:", "DATABASE_URL", "public build arg keys: PUBLIC_URL", "mount: volume data -> /data", "recovery:", "quotes:revision"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %s: %s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "synthetic-secret") {
+		t.Fatal("plan exposed inline secret")
+	}
+}

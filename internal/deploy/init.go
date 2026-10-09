@@ -30,14 +30,26 @@ func InitConfig(root string, configPath string) (InitResult, error) {
 		projectName = "app"
 	}
 
-	body := starterConfig(projectName)
-	if err := os.WriteFile(fullPath, []byte(body), 0644); err != nil {
-		return InitResult{}, fmt.Errorf("write %s: %w", configPath, err)
+	for _, file := range []string{".gitignore", ".dockerignore"} {
+		if err := noSymlinkPath(root, file); err != nil {
+			return InitResult{}, err
+		}
 	}
-	if err := ensureIgnoreEntry(root, ".gitignore", ".deploy/"); err != nil {
+	if err := ensureIgnoreEntries(root, ".gitignore", []string{".deploy/", ".env", ".env.*", "!.env.example", "!.env.*.example"}); err != nil {
 		return InitResult{}, err
 	}
-	if err := ensureIgnoreEntry(root, ".dockerignore", ".deploy"); err != nil {
+	if err := ensureIgnoreEntries(root, ".dockerignore", []string{".git", ".deploy", ".env", ".env.*", "!.env.example", "!.env.*.example"}); err != nil {
+		return InitResult{}, err
+	}
+	file, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		return InitResult{}, err
+	}
+	if _, err := file.WriteString(starterConfig(projectName)); err != nil {
+		file.Close()
+		return InitResult{}, err
+	}
+	if err := file.Close(); err != nil {
 		return InitResult{}, err
 	}
 
@@ -55,7 +67,7 @@ build:
   context: .
   dockerfile: Dockerfile
   tags:
-    - "%s:${git_sha}"
+    - "%s:${release}"
 
 hosts:
   app-01:
@@ -64,13 +76,13 @@ hosts:
 
 services:
   web:
-    image: "%s:${git_sha}"
+    image: "%s:${release}"
     hosts: [app-01]
     ports:
       - published: auto
         target: 3000
     health:
-      command: ["true"]
+      http: http://127.0.0.1:3000/health
       timeout_seconds: 60
 
 routes:
@@ -98,29 +110,34 @@ func slugify(value string) string {
 	return strings.Trim(out.String(), "-")
 }
 
-func ensureIgnoreEntry(root string, fileName string, entry string) error {
+func ensureIgnoreEntry(root, fileName, entry string) error {
+	return ensureIgnoreEntries(root, fileName, []string{entry})
+}
+func ensureIgnoreEntries(root, fileName string, entries []string) error {
 	if err := noSymlinkPath(root, fileName); err != nil {
 		return err
 	}
 	path := filepath.Join(root, fileName)
 	body, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("read %s: %w", fileName, err)
+		return err
 	}
-	lines := strings.Split(string(body), "\n")
-	for _, line := range lines {
-		if strings.TrimSpace(line) == entry {
-			return nil
+	existing := map[string]bool{}
+	for _, line := range strings.Split(string(body), "\n") {
+		existing[strings.TrimSpace(line)] = true
+	}
+	var missing []string
+	for _, entry := range entries {
+		if !existing[entry] {
+			missing = append(missing, entry)
 		}
 	}
-
-	prefix := ""
+	if len(missing) == 0 {
+		return nil
+	}
+	prefix := "\n"
 	if len(body) > 0 && !strings.HasSuffix(string(body), "\n") {
-		prefix = "\n"
+		prefix = "\n\n"
 	}
-	addition := prefix + "\n# pp deployment bundles and state\n" + entry + "\n"
-	if err := os.WriteFile(path, append(body, []byte(addition)...), 0644); err != nil {
-		return fmt.Errorf("write %s: %w", fileName, err)
-	}
-	return nil
+	return os.WriteFile(path, append(body, []byte(prefix+"# pp\n"+strings.Join(missing, "\n")+"\n")...), 0644)
 }

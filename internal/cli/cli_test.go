@@ -52,3 +52,14 @@ func TestConfigFlagSelectsEnvironmentState(t *testing.T) {
 		t.Fatalf("%d: %s", code, out.String())
 	}
 }
+
+func TestVersionAndCommandHelpNeedNoApplicationInputs(t *testing.T) {
+	var out bytes.Buffer
+	if code := Main("pp", []string{"version"}, &out, &out); code != 0 || !strings.Contains(out.String(), "compiler:") || !strings.Contains(out.String(), "revision:") {
+		t.Fatalf("version: %d %s", code, out.String())
+	}
+	out.Reset()
+	if code := Main("pp", []string{"rollback", "--help"}, &out, &out); code != 0 || !strings.Contains(out.String(), "saved release inputs") {
+		t.Fatalf("help: %d %s", code, out.String())
+	}
+}

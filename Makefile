@@ -17,10 +17,12 @@ install:
 	$(GO) build -o "$(PP_BIN)" ./cmd/deploy
 	@echo "installed $(PP_BIN)"
 
-build: install
+build:
+	@mkdir -p bin
+	$(GO) build -o bin/pp ./cmd/deploy
 
 test:
 	$(GO) test ./...
 
 clean:
-	rm -f "$(PP_BIN)"
+	rm -f bin/pp

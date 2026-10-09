@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 
 	"git.domi.ninja/domi-ninja/infra-meta-forgejo/internal/deploy"
 )
@@ -15,6 +16,9 @@ func Main(name string, args []string, stdout, stderr io.Writer) int {
 	return MainContext(context.Background(), name, args, stdout, stderr)
 }
 func MainContext(ctx context.Context, name string, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 1 && args[0] == "help" {
+		return MainContext(ctx, name, []string{args[1], "--help"}, stdout, stderr)
+	}
 	if len(args) == 0 {
 		args = []string{"deploy"}
 	}
@@ -22,6 +26,7 @@ func MainContext(ctx context.Context, name string, args []string, stdout, stderr
 	command := args[0]
 	flags := flag.NewFlagSet(name+" "+command, flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	flags.Usage = func() { printCommandHelp(name, command, stderr); flags.PrintDefaults() }
 	configPath := flags.String("config", "deploy.yml", "deployment config, relative to the working directory")
 	var releasePorts bool
 	if command == "down" {
@@ -42,6 +47,9 @@ func MainContext(ctx context.Context, name string, args []string, stdout, stderr
 		return 2
 	}
 	switch command {
+	case "version", "--version":
+		printVersion(name, stdout)
+		return 0
 	case "cleanup":
 		wd, err := os.Getwd()
 		if err == nil {
@@ -182,10 +190,11 @@ func printHelp(name string, w io.Writer) {
 	fmt.Fprintln(w, "commands:")
 	fmt.Fprintln(w, "  deploy    build, transfer, and apply the release")
 	fmt.Fprintln(w, "  down      remove remote containers for the selected project/environment")
+	fmt.Fprintln(w, "  version   show compiler and source build identity")
 	fmt.Fprintln(w, "  init      create a starter deploy.yml")
 	fmt.Fprintln(w, "  plan      validate deploy.yml and print host/service placement")
-	fmt.Fprintln(w, "  status    show local deployment state")
-	fmt.Fprintln(w, "  rollback  restore previous code and DB state")
+	fmt.Fprintln(w, "  status    show local attempts and observed container state")
+	fmt.Fprintln(w, "  rollback  recover the saved previous release; declared database recovery only")
 	fmt.Fprintln(w, "  cleanup   remove expired releases and owned images (--dry-run to preview)")
 }
 
@@ -194,4 +203,41 @@ func configuredDeployer(ctx context.Context, root, configPath string, stdout, st
 	deployer.ConfigPath = configPath
 	deployer.Runner.Context = ctx
 	return deployer
+}
+
+func printVersion(name string, w io.Writer) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		fmt.Fprintf(w, "%s build unknown\n", name)
+		return
+	}
+	revision, dirty := "unknown", "unknown"
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			dirty = setting.Value
+		}
+	}
+	fmt.Fprintf(w, "%s %s\ncompiler: %s\nrevision: %s\nsource_modified: %s\n", name, info.Main.Version, info.GoVersion, revision, dirty)
+}
+func printCommandHelp(name, command string, w io.Writer) {
+	fmt.Fprintf(w, "usage: %s %s [options]\n", name, command)
+	switch command {
+	case "deploy":
+		fmt.Fprintln(w, "Build the working tree, apply services and routes, then run checks.")
+	case "rollback":
+		fmt.Fprintln(w, "Use saved release inputs. Database restore plans and application hooks need explicit recovery.")
+	case "down":
+		fmt.Fprintln(w, "Remove owned containers and routes. Keep volumes and, unless requested, ports.")
+	case "status":
+		fmt.Fprintln(w, "Show local records and inspect recorded hosts over SSH.")
+	case "plan":
+		fmt.Fprintln(w, "Validate inputs and preview images, placement, mounts, routes and recovery without changing hosts.")
+	case "init":
+		fmt.Fprintln(w, "Create a config with a localhost health endpoint and ignore deployment state and env files.")
+	case "cleanup":
+		fmt.Fprintln(w, "Remove expired owned artifacts. Preserve current and previous releases and data volumes.")
+	}
 }

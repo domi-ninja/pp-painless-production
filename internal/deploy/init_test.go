@@ -81,3 +81,20 @@ func TestSlugify(t *testing.T) {
 		}
 	}
 }
+
+func TestStarterUsesLocalHealthAndKeepsSecretsOutOfBuildContext(t *testing.T) {
+	root := t.TempDir()
+	if _, err := InitConfig(root, "deploy.yml"); err != nil {
+		t.Fatal(err)
+	}
+	body := string(mustRead(t, filepath.Join(root, "deploy.yml")))
+	if !strings.Contains(body, "http://127.0.0.1:3000/health") || !strings.Contains(body, "${release}") || strings.Contains(body, "[\"true\"]") {
+		t.Fatal("starter cannot check application readiness")
+	}
+	ignore := string(mustRead(t, filepath.Join(root, ".dockerignore")))
+	for _, entry := range []string{".git\n", ".deploy\n", ".env\n", ".env.*\n"} {
+		if !strings.Contains(ignore, entry) {
+			t.Fatalf("missing ignore %s", entry)
+		}
+	}
+}

@@ -170,3 +170,9 @@ Automatic allocation avoids saved allocations, listening sockets, Docker-publish
 pp templates apply to image tags, public build args, service command and entrypoint arguments, inline env values, health commands, mount paths and routes. `${service.NAME.port.TARGET}` supports fixed and automatic ports. Hooks, command checks and migration arguments can use metadata and their declared env inputs. Missing `${env.KEY}` or `${service.NAME.port.TARGET}` inputs fail validation. Env values enter replacements once; pp does not interpret dollar expressions inside a value.
 
 Env files use one `KEY=VALUE` per line. Keys contain letters, digits and underscores and cannot start with a digit. Blank lines and lines beginning with `#` are ignored. One matching pair of outer quotes is removed. Other quotes, dollar signs, backslashes and inline `#` characters stay literal. Duplicate keys, `export`, unmatched outer quotes and multiline values fail. Migration commands and selected env values are saved before execution so recovery uses the same inputs.
+
+## Build identity and previews
+
+`pp version` prints the compiler, source revision and whether the tool's own source was modified when built. `pp plan` previews image tags, hosts, env key scopes, ports, mounts, routes and recovery policy. Automatic ports remain marked `auto`; plan does not reserve host ports. It does not print secret values.
+
+Application builds use the working tree. A dirty digest describes Git status and the tracked diff; it does not hash untracked file contents or prove the complete Docker context matches a commit. Review untracked build inputs and `.dockerignore` before deploying. The starter uses release-specific image tags and ignores Git metadata, deployment state and env files in the build context. Only env example files are included by default.

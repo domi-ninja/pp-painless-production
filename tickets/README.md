@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [026 - improve starter plan and help ](026-improve-starter-plan-and-help.md)
 - [027 - repair convex bootstrap ](027-repair-convex-bootstrap.md)
 - [028 - make examples maintainable ](028-make-examples-maintainable.md)
 - [029 - remove unrelated operations ](029-remove-unrelated-operations.md)
@@ -36,6 +35,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [Completed 024](done/024-render-volumes-and-builds.md)
 
 - [Completed 025](done/025-resolve-ports-and-templates.md)
+
+- [Completed 026](done/026-improve-starter-plan-and-help.md)
 
 ## Earlier work
 
