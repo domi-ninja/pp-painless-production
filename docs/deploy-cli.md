@@ -1,178 +1,105 @@
-# Deploy CLI
+# Commands and deployment behavior
 
-Go implementation of the side-project deployment system.
+Run pp from the application's working directory. It loads `deploy.yml` unless you pass `--config` after the command. Config paths remain relative to that working directory.
 
-New bundles require Docker Compose 2.30+ with raw env-file support. Compose values escape literal dollars and service env files preserve literal values. Old rollback bundles are not rewritten; regenerate a release to apply these protections.
-
-## Current Slice
-
-- `go run ./cmd/deploy --help`
-- `go run ./cmd/deploy init`
-- `go run ./cmd/deploy plan`
-- `go run ./cmd/deploy deploy`
-- `go run ./cmd/deploy status`
-- `go run ./cmd/deploy rollback`
-- `go run ./cmd/deploy down`
-- `go run ./cmd/deploy cleanup --dry-run`
-- Installed locally as `pp`.
-
-`deploy plan` loads `deploy.yml`, validates schema references and required env values, reads git metadata, computes a timestamp-plus-SHA release ID, and prints host/service placement.
-
-`deploy` builds images locally with a dedicated Buildx builder, exports them to `.deploy/<project>/<environment>/releases/<release>/images/`, renders per-host Compose bundles, transfers only the images each host uses over SSH, runs `docker load`, then runs `docker compose up -d`. Uploaded image tarballs are removed after loading and pinning. After a successful deployment, it prints the resolved IP addresses for each deployment domain.
-
-For upstream images, `pull: if_missing` checks the host's image cache before pulling, including `:latest`. A private pp cache preserves this behavior after pp removes a source tag it introduced. `pull: always` refreshes the image; `pull: never` or an omitted policy requires an image already loaded on the host. Compose startup never pulls a second time. New releases record exact image IDs and use release-specific `pp.local/` tags, so rollback does not resolve mutable upstream tags again. Built images can be restored from local archives; upstream images must remain on the host.
-
-Use `published: auto` for route-backed services. `pp` allocates a stable localhost backend port from `18000-19999`, stores it on the host under `/etc/pp/ports.tsv`, and renders Caddy routes to the allocated port.
-
-Both fixed and automatic ports bind to `127.0.0.1` unless `host_ip` is explicit. Host-level Caddy can reach these ports while serving public HTTPS. To expose a container directly, set `host_ip: 0.0.0.0` or a specific host address. Existing fixed ports without `host_ip` become loopback-only on their next deployment. A proxy on another host or in a separate container network needs an explicitly reachable address.
-
-`status` reads local deployment metadata. `rollback` re-applies the previous local release bundle and runs a configured DB rollback command when migrations are configured.
-
-## Startup checks
-
-In a phased deployment, pp waits for infrastructure and backend services before hooks, but starts frontend services without Compose's `--wait`. An HTTP smoke check makes one request; `timeout_seconds` is a request timeout, not a readiness retry window. For an application that takes time to start, use a command smoke check with bounded retries, such as `curl --fail --retry 12 --retry-all-errors --retry-delay 2 --max-time 10 --output /dev/null https://example.com/health`, with an overall command timeout. Authentication checks should read credentials from their environment, not command arguments or logged configuration.
-
-For systemd deployment jobs, explicitly set `User=` so the service gets its login environment, including the home directory used by pp and SSH. Validate the execution environment and `pp plan` before stopping services or modifying data.
-
-## Environment isolation
-
-Service `env.required` lists the keys injected from `env.source`, as well as validating their presence. Declare every key the service needs. A source without a key list is rejected unless you explicitly set `env.include_all: true`. The same key-selection rule applies to hooks, command checks and migrations. Child processes still inherit operator tool settings. Build arguments and route templates must contain public configuration; use protected runtime env files for secrets.
-
-Each deployment belongs to a project and environment. Commands accept `--config` after the command name; paths inside the config remain relative to the working directory.
+| Command | Behavior |
+| --- | --- |
+| `pp init` | Create a starter config and ignore rules; refuse an existing config. |
+| `pp plan` | Validate config and inputs; preview placement, images, env key scopes, mounts, routes and recovery policy. |
+| `pp deploy` or `pp` | Build and apply a release, then run checks. |
+| `pp status` | Print local release and attempt records, then inspect recorded hosts. |
+| `pp rollback` | Recover the previous release using saved inputs. Read [recovery](recovery.md) first. |
+| `pp down` | Stop owned containers and remove owned routes; preserve data and port reservations. |
+| `pp down --release-ports` | Also retire the deployment's reserved ports. |
+| `pp cleanup --dry-run` | Preview expired bundles and owned image references. |
+| `pp cleanup` | Retry pending cleanup and enforce retention where possible. |
+| `pp version` | Print the compiler, source revision and modified-source status. |
+| `pp help COMMAND` | Print a command's options and description. |
 
 ```sh
-pp deploy --config deploy.dev.yml
+pp plan --config deploy.dev.yml
+pp deploy --config deploy.prod.yml
 pp status --config deploy.prod.yml
-pp rollback --config deploy.dev.yml
-pp down --config deploy.dev.yml
 ```
 
-For a new deployment of project `shop`, environment `dev`:
+Plan does not contact hosts or reserve automatic ports. It can upgrade old local state. It prints env key names, never values. Deployment validates local and remote tools, paths, free space and host architecture before building or migrating. An upstream-only deployment needs no local Docker daemon unless it runs a migration.
+
+## Applying a release
+
+pp builds with its own Docker-container Buildx builder. The first build downloads BuildKit. It renders private per-host Compose bundles and selected runtime env files, exports built images, uploads only the images each host needs and loads them. Uploaded archives are removed after loading and pinning.
+
+Upstream `pull: if_missing` reuses the host cache, including pp's private cache for images it first pulled. `always` refreshes the source image; `never` and omission require an image already present. pp records exact image IDs and uses release-specific aliases. Compose startup does not pull again. Built images can be restored from local archives; upstream images must remain on the host.
+
+A declared migration runs locally before service apply. Phased apply starts infrastructure and waits, runs `after_infra_healthy`, starts backends and waits, applies routes, runs `after_backend_healthy`, then applies all services and runs `after_services_healthy`. The final apply removes retired services and waits up to 300 seconds. Unphased apply also waits. Health checks must measure the app's readiness.
+
+Routes are applied again before smoke checks. HTTP checks retry within a bounded timeout; command checks run once. pp records host apply progress and check results even when a later host fails. See [configuration](configuration.md) for timeout defaults and [recovery](recovery.md) for failure behavior.
+
+## Identity and isolation
+
+Each deployment belongs to a project and environment. For a new `shop` deployment in `dev`:
 
 | Resource | Identity or location |
 | --- | --- |
-| Compose containers, networks and managed volumes | Compose project `shop_dev` |
+| Compose project | `shop_dev` |
 | Local state and releases | `.deploy/shop/dev/` |
 | Remote releases | `.pp/shop/dev/releases/` |
-| Automatic port key | `shop_dev:<service>:<target>` |
+| Automatic port key | `shop_dev:SERVICE:TARGET` |
 | Caddy route file | `/etc/pp/proxy/routes/shop_dev.caddy` |
 
-`down` requires both `pp.project` and `pp.environment` labels. State and rollback records must match the selected deployment. `plan` prints its identity.
+Down selects both `pp.project` and `pp.environment` labels. State records must match the selected identity. Explicit bind paths, external volumes, fixed ports, image tags, domains and credentials still need separate values where sharing would be unsafe. Hooks are trusted scripts; labels cannot constrain arbitrary shell commands.
 
-Explicit bind paths, external volumes, fixed ports, image tags, domains and credentials remain your configuration's responsibility. Give them separate values where sharing would be unsafe. Hooks and helper scripts must also select containers using both labels. The CLI cannot isolate arbitrary shell commands.
+Use a persistent checkout per deployment and the same SSH account on a host. Keep `.deploy/` between CI jobs. Checkout and SSH-held host locks prevent overlapping pp operations; losing a host lock cancels work. Manual Docker commands and other SSH accounts are outside those locks.
+
+## Ports and routes
+
+Ports default to `127.0.0.1`. Automatic ports come from 18000 through 19999 and remain stable in `/etc/pp/ports.tsv`. Allocation considers saved reservations, listening sockets, Docker bindings and fixed ports in the pending plan. Corrupt or conflicting records fail; pp does not silently reassign them.
+
+Use `${service.NAME.port.TARGET}` in a route template for a fixed or automatic port. Set `host_ip` explicitly for a different binding. A public Docker port needs a Docker-aware or upstream firewall; UFW alone does not restrict it.
+
+pp stages and validates the complete shared Caddy configuration before replacing its own route file. Failed reload restores that file and reloads the old configuration. Keep `import /etc/pp/proxy/routes/*.caddy` on its own line and use absolute paths for other imports. Custom templates are trusted Caddy configuration.
+
+Removing a route updates the deployment's route file. Removing services from the final Compose apply preserves their data volumes. Removing a host that still has owned containers fails before building or migrating. Down reads saved hosts so you can retire the old deployment even after editing today's config.
+
+Down keeps reserved ports unless `--release-ports` is explicit. Retention never reclaims them. Recovery after releasing ports can fail if another deployment has taken them.
+
+## Status
+
+Status needs deployment identity and local records, not current env files, build inputs or Git history. It prints the current and previous successful releases separately from the latest deploy or rollback attempt. It then inspects hosts with a 15 second limit per host, reporting container release labels, state, health and drift. An unreachable host returns failure.
+
+A successful local record is not proof of the current host state. Compare the observed release and expected services, especially after manual host changes or interrupted deployment.
 
 ## Retention and cleanup
 
-Cleanup runs before a deployment and again when it finishes, including failed attempts. Defaults are finite per project/environment:
+Defaults are finite per project/environment:
 
 ```yaml
 retention:
-  releases: 3          # Successful releases total, including current and previous
-  failed: 1           # Failed or interrupted attempts
-  min_free_mb: 1024    # Free-space reserve, MiB
-  build_cache_mb: 10240 # Dedicated builder cache target, MiB
+  releases: 3
+  failed: 1
+  min_free_mb: 1024
+  build_cache_mb: 10240
 ```
 
-Omitted or zero values use these defaults. At least two successful releases and one failed attempt must be retained. Current and previous releases are always protected, including after rollback.
+Zero uses the default. At least two successful releases and one failed attempt must remain. Current and previous releases are always protected. Cleanup runs before and after deployment, including failures.
 
-```sh
-pp cleanup --dry-run
-pp cleanup
-pp cleanup --config deploy.dev.yml
-```
+Cleanup removes expired private bundles, old secrets and recorded image references. It does not force image removal or prune volumes, containers, unrelated images or the default build cache. Images without ownership records remain untouched. Migration images have their own recorded IDs and release aliases.
 
-Cleanup removes expired local and remote bundles, including old secrets, and tracked Docker image references. It never forces image removal or prunes volumes, containers, unrelated images or the default build cache. Legacy Docker images without ownership records stay untouched; legacy bundle directories can expire normally. Dry-run lists candidates without contacting hosts or deleting artifacts, though loading old state can migrate local metadata.
+Offline hosts, containers still using an expired release and cleanup errors can exceed the configured retention. A versioned `cleanup.json` journal tracks pending hosts, including removed hosts. Their local bundles remain until remote cleanup succeeds. Retry with `pp cleanup`; it does not need build files or secrets. A cleanup error does not undo a successful deployment.
 
-Local migration images get their own release aliases and recorded IDs. Rollback uses the recorded migration image rather than guessing from the application's first build. Migration image caches follow the same release retention; existing operator-owned source tags remain untouched.
+Dry-run lists candidates without contacting hosts or deleting artifacts, though loading old state can upgrade metadata. The dedicated builder is pruned before and after builds and by cleanup. Buildx must support `prune --max-used-space`, `--reserved-space` and `--min-free-space`. Existing default-builder cache remains separate.
 
-An offline host, an active or stopped container using an expired release, or a cleanup error can temporarily exceed retention. The versioned `cleanup.json` journal remembers pending hosts, including hosts removed from the config. Other hosts still get cleaned. Affected local bundles remain available for recovery until remote cleanup succeeds. Retry with `pp cleanup`; it does not need Git history, build files or secrets. Automatic cleanup errors are reported without undoing a successful deployment.
-
-Use one persistent checkout per deployment in CI, and the same SSH account for operations on a host. Keep `.deploy/` between jobs. Checkout locks and SSH-held host locks prevent overlapping operations; losing a host lock cancels ongoing commands. These locks do not coordinate manual Docker commands or other SSH accounts.
-
-Builds use a pp-owned `docker-container` Buildx builder shared by the local user. pp prunes its cache before and after builds, including build failures; `pp cleanup` also trims an existing pp builder. Your Buildx must support `prune --max-used-space`, `--reserved-space` and `--min-free-space`. The first build downloads BuildKit; base images must be accessible to that builder, not only present in the default Docker image store. Existing default-builder cache is not adopted or pruned.
-
-Release counts are not disk quotas. pp checks local free space before building and exporting, and host bundle/Docker storage before uploading, allowing room for incoming archives. On Docker Desktop, the local daemon's storage is inside its VM; the dedicated builder's pruning policy handles that cache. Builds can still outgrow available space, and protected images, application data, backups and logs need their own disk policies.
+Release counts are not disk quotas. Free-space checks allow room for incoming archives, but builds can still outgrow storage. Protected images, application data, backups and logs need separate disk policies. Docker Desktop stores its daemon data inside a VM.
 
 ## Migrating an existing deployment
 
-Run `pp` as usual. Local state upgrades automatically before deployment. `pp status` or `pp plan` can perform the local upgrade without changing the running site.
+Config version remains 1. State and release metadata use version 2; unversioned metadata is v1. Unknown newer formats fail and require a newer pp. The CLI does not rewrite config YAML.
 
-- Config remains version `1`; omitting `version` means `1`. The CLI does not rewrite your YAML.
-- State and release metadata use version `2`. Unversioned files are v1. Unknown newer versions fail before deployment and ask you to upgrade `pp`.
-- Legacy `.deploy/state.json` identifies the owning project and environment. The CLI copies that environment's release metadata into `.deploy/<project>/<environment>/` and preserves current and previous release IDs.
-- Existing deployments retain their Compose name, managed volumes, port allocation keys, route filename and remote release paths. State records this stable `resource_id`. New environments get `<project>_<environment>` resources.
-- Original state and bundles stay in place. Imported records still reference the old bundles, so do not delete `.deploy/releases/`. Upgrades of already-scoped v1 files keep `.v1.bak` copies. Writes are atomic; concurrent local migration attempts share a lock.
+Legacy `.deploy/state.json` identifies the owning project and environment. pp copies its release metadata into the scoped state directory and preserves current/previous IDs, Compose name, managed volumes, port keys, route filename and remote paths through a stable `resource_id`. Original state and bundles remain. Imported records can reference `.deploy/releases/`; do not delete it. Scoped v1 upgrades retain `.v1.bak` copies.
 
-Before deployment, the CLI checks container ownership on every host. It then records a versioned claim at `.pp/<project>/resource-owner` for adopted resources. A second environment or checkout cannot claim the same resources. Run the original environment once before adding another environment beside legacy resources.
+The host ownership check records a versioned claim at `.pp/PROJECT/resource-owner` for adopted resources. Run the original environment once before adding another environment beside legacy resources. Conflicting ownership, missing releases or mixed container layouts require investigation; pp will not guess or initialize a replacement database.
 
-Missing release records, conflicting ownership, or both old and new container layouts require investigation. The CLI will not guess, delete volumes or start a replacement database. A deployment already migrated to scoped resources, such as Humanist production, keeps its current identity.
+You can move a checkout together with `.deploy/`. Saved paths resolve beneath the new checkout, while identity and artifacts must still match. Loading current-version metadata does not rewrite it; the next save records the new location.
 
-For future format changes, add an explicit version migration and tests. Reading an old format must not silently rename infrastructure or discard rollback history. Config and state versions advance independently.
+## Build identity
 
-### Moving a checkout
-
-You can rename or move an app directory together with its `.deploy` directory.
-PP resolves recorded bundle and image paths under the current checkout when loading
-releases, including older deployment layouts. Project, environment, release ID and
-remote resource identities must still match; image artifacts must stay inside their
-recorded bundle. Current and previous releases remain available for rollback.
-No repair command or manual metadata edit is needed. Loading current-version metadata
-does not rewrite it; the next save records the current location.
-
-## Saved recovery inputs
-
-Each new release contains a private `recovery.json` and, when needed, a selected `migration.env`. Rollback uses saved hosts, phases, HTTP checks and migration inputs. It needs the original Compose files, service env files and image archives. Keep the whole release directory when moving a checkout.
-
-Rollback reads deployment identity without requiring today's env files or build inputs. It never runs today's application hooks or command checks against yesterday's containers. A release that uses those scripts requires explicit application recovery. A legacy release without a saved migration contract also requires manual database recovery. Container rollback cannot undo a Convex schema push or restore a database backup.
-
-## Readiness and database recovery
-
-Compose waits up to 300 seconds for services to run and for configured health checks to pass. `after_services_healthy` runs after that wait. HTTP smoke checks make up to three attempts within their timeout, with one second between attempts. Set `attempts: 1` for a single request. Command checks run once.
-
-Hooks and migrations default to a 300 second timeout. Set `timeout_seconds` to allow longer work. Interrupting pp cancels subprocesses, HTTP requests and DNS lookups. Cancellation does not prove that a migration stopped before changing data.
-
-After a completed migration and failed apply, pp runs the saved database rollback command before starting older containers. A failed database revert stops container recovery. A `restore_plan` always needs manual action. A failed forward migration may have changed data partially; pp reports that condition and does not guess how to undo it. Your migration and rollback commands must handle transactions and compatibility with services that are already running.
-
-## Inspecting a failed deployment
-
-`pp status` prints the local current release and the latest deploy or rollback attempt separately. It also queries recorded hosts over SSH, with a 15 second limit per host, and prints container release labels, state and health. A host error returns a failing exit status. Compare observed services with the expected local release; local success metadata does not prove the host still runs that release.
-
-Status needs deployment identity and local records, not current env files, build inputs or Git history. Per-host apply progress remains in the attempted release even if another host fails. Recovery checks and failures are recorded separately from the original apply checks.
-
-## Routes and retired services
-
-pp stages the full shared Caddy configuration and validates it before replacing its own route file. A failed reload restores the old file and reloads the restored configuration. Caddy validation also rejects ambiguous site definitions. Keep the host's `import /etc/pp/proxy/routes/*.caddy` on its own line; use absolute paths for other imports.
-
-The final Compose apply removes retired services from the same deployment. It preserves data volumes. Removing a route removes it from that deployment's route file. Removing a host while it still has owned containers fails before building or migrating. Run `pp down` using that deployment's saved state first. Down reads saved hosts, removes owned containers and removes its routes; it does not delete volumes.
-
-## Configuration validation
-
-Unknown YAML fields, including nested fields, fail validation. pp supports service phases `infra`, `backend` and `frontend`, plus an omitted phase for the final apply. Supported hooks are `after_backend_healthy` and `after_services_healthy`. The only check group is `smoke`.
-
-Build contexts must be existing directories and Dockerfiles must be regular files inside the app repository. Each build supports one platform, `linux/amd64` or `linux/arm64`, because pp loads and transfers local images. Ports must be between 1 and 65535, and `host_ip` must be an IP address. Required env values must exist and be nonempty. Timeouts accept 0 for the default or 1 to 86400 seconds.
-
-Host roles are descriptive labels. They do not grant permissions or enforce network policy. pp rejects CI and Git-hosting placement labels and checks the host's CI marker before deployment; run those services on separate hosts.
-
-## Built images and mounts
-
-A built service's `image` must match a tag from its selected build. Built images cannot use an upstream pull policy. Upstream-only deployments can omit `build` and `builds`; pp skips builder setup and does not require a local Docker daemon unless it runs a migration.
-
-Mounts use explicit Compose long syntax. A declared `name` defaults to a named volume; a host `source` defaults to a bind mount. Bind sources must be absolute host paths and must already exist. pp sets `create_host_path: false` so a typo cannot create an empty data directory. Named volumes must appear in the top-level `volumes` map. Set `read_only: true` for either type when needed.
-
-Route templates for a host are combined into one deployment-owned route file. Remove the former `dest_name` field; it never selected the destination.
-
-## Ports, templates and env syntax
-
-Automatic allocation avoids saved allocations, listening sockets, Docker-published ports and every fixed port in the pending host plan. A saved allocation is reused only when it does not conflict with the plan and any live binding has the expected deployment and service owner. Invalid or conflicting port records fail instead of being reassigned.
-
-`pp down` keeps allocations for a future restart. Use `pp down --release-ports` to retire them after stopping the deployment. Ordinary retention does not reclaim ports. A later rollback may need those old ports to be available again.
-
-pp templates apply to image tags, public build args, service command and entrypoint arguments, inline env values, health commands, mount paths and routes. `${service.NAME.port.TARGET}` supports fixed and automatic ports. Hooks, command checks and migration arguments can use metadata and their declared env inputs. Missing `${env.KEY}` or `${service.NAME.port.TARGET}` inputs fail validation. Env values enter replacements once; pp does not interpret dollar expressions inside a value.
-
-Env files use one `KEY=VALUE` per line. Keys contain letters, digits and underscores and cannot start with a digit. Blank lines and lines beginning with `#` are ignored. One matching pair of outer quotes is removed. Other quotes, dollar signs, backslashes and inline `#` characters stay literal. Duplicate keys, `export`, unmatched outer quotes and multiline values fail. Migration commands and selected env values are saved before execution so recovery uses the same inputs.
-
-## Build identity and previews
-
-`pp version` prints the compiler, source revision and whether the tool's own source was modified when built. `pp plan` previews image tags, hosts, env key scopes, ports, mounts, routes and recovery policy. Automatic ports remain marked `auto`; plan does not reserve host ports. It does not print secret values.
-
-Application builds use the working tree. A dirty digest describes Git status and the tracked diff; it does not hash untracked file contents or prove the complete Docker context matches a commit. Review untracked build inputs and `.dockerignore` before deploying. The starter uses release-specific image tags and ignores Git metadata, deployment state and env files in the build context. Only env example files are included by default.
+App builds use the working tree. The dirty digest describes Git status and the tracked diff. It does not hash untracked contents or prove that the complete Docker context matches a commit. Review untracked inputs and `.dockerignore` before deployment. Keep secrets and `.deploy` out of build contexts.

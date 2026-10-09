@@ -1,10 +1,10 @@
-# 004 - Render Per-Host Compose Bundles
+# 004 - Render per-host Compose Bundles
 
 ## Goal
 
 Generate deterministic per-host Docker Compose bundles from the logical deployment config.
 
-## Depends On
+## Dependencies
 
 - 003
 
@@ -23,7 +23,7 @@ Generate deterministic per-host Docker Compose bundles from the logical deployme
 - Snapshot tests for generated bundles.
 - `deploy plan` output showing generated host/service mapping.
 
-## Acceptance Criteria
+## Acceptance
 
 - A service assigned to two hosts appears in both host compose files.
 - Host-local ports are checked for conflicts before rendering succeeds.

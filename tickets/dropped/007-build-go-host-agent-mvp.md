@@ -1,10 +1,10 @@
-# 007 - Build Go Host Agent MVP
+# 007 - Build Go host agent MVP
 
 ## Goal
 
 Create the persistent host management agent as a Go binary.
 
-## Depends On
+## Dependencies
 
 - 001
 
@@ -23,7 +23,7 @@ Create the persistent host management agent as a Go binary.
 - Systemd-compatible binary behavior.
 - Unit tests for state persistence and response shapes.
 
-## Acceptance Criteria
+## Acceptance
 
 - CLI can query agent health and host state.
 - Agent restart preserves last deploy metadata.

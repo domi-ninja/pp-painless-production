@@ -1,10 +1,10 @@
-# 002 - Scaffold Monorepo Deploy CLI
+# 002 - Scaffold deployment CLI
 
 ## Goal
 
 Create the Go monorepo CLI package that exposes the deployment command surface.
 
-## Depends On
+## Dependencies
 
 - 001
 
@@ -28,7 +28,7 @@ Create the Go monorepo CLI package that exposes the deployment command surface.
 - Basic unit tests for command parsing.
 - README snippet showing intended invocation.
 
-## Acceptance Criteria
+## Acceptance
 
 - Running `deploy plan` from a project root finds `deploy.yml`.
 - Running `deploy` without args enters the default full deployment path.

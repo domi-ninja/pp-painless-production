@@ -1,58 +1,40 @@
-# Painless Production
+# Painless production
 
-`pp` deploys your applications to Docker hosts over SSH. Run it from your app's repository: it builds images locally, uploads release bundles, starts services, updates Caddy routes and runs your deployment checks.
+pp builds your app's Docker images and deploys them to hosts over SSH. It keeps release bundles, waits for service health, updates Caddy routes and runs deployment checks. It is an experimental tool for trusted operators.
+
+## First deployment
+
+Install from this repository with a supported, patched Go compiler, starting with Go 1.26.9:
 
 ```sh
-pp plan     # Inspect the selected deployment
-pp          # Build and deploy
-pp status   # Read the recorded release state
-pp rollback # Reapply the previous release
+git clone https://github.com/domi-ninja/pp-painless-production.git
+cd pp-painless-production
+make install
+pp version
 ```
 
-## Start here
+Add `$(go env GOPATH)/bin` to your PATH if needed. Prepare a host with Docker, Compose 2.30+, SSH and optional Caddy using [Getting started](docs/GETTING_STARTED.md). Local image builds also require Docker and Buildx on your deployment machine.
 
-This is an experimental tool meant to be used from a full clone of this repository. Keep the source, examples and Ansible playbook together, and build the CLI locally with `make install`. Expect to inspect and adapt the configuration for your hosts. This is not a standalone binary installer or a managed hosting service.
+Then work from your app's Git repository, which must already have a Dockerfile:
 
-Follow [Getting started](docs/GETTING_STARTED.md) to clone the repo, install `pp`, prepare a server if needed, and deploy your first app.
-
-## Everyday deployment
-
-Each app has its own committed `deploy.yml`. It describes the images, target hosts, ports, persistent storage, routes and optional hooks or checks. Secrets stay in ignored env files.
-
-`pp` builds and exports images on your machine, then transfers them over SSH. Hosts load the images and run Docker Compose. Published ports default to loopback; host-level Caddy serves public HTTPS.
-
-Project and environment identify each deployment. Use `pp deploy --config deploy.dev.yml` to select a different config. Local state and release metadata live under `.deploy/<project>/<environment>/`; older state upgrades automatically while preserving existing resource names and rollback history.
-
-Automatic cleanup keeps three successful releases and one failed attempt by default. Current and previous releases stay protected. Preview cleanup with `pp cleanup --dry-run`; see [retention settings](docs/deploy-cli.md#retention-and-cleanup) for image and build-cache limits.
-
-- [CLI behavior and migrations](docs/deploy-cli.md)
-- [Example applications](examples/)
-- [Deployment security review](docs/security-review-deployment.md)
-
-When updating several applications, run `pp plan` in each checkout and preserve its project/environment identity, data paths, and `.deploy` history. Review uncommitted changes before building: `pp deploy` includes the working tree, not just Git HEAD. Run releases sequentially for projects sharing a host, and verify each application's checks and recorded commit before proceeding. Updating pp does not require credential rotation or an infrastructure image upgrade.
-
-## Server provisioning, occasionally
-
-Ansible is a setup subtask, not part of every deployment. Use the bundled [provisioning playbook](infra/ansible/README.md) when adding a host or deliberately changing its system configuration. It prepares Ubuntu, SSH access, Docker, firewall rules and optional Caddy or storage mounts. Skip provisioning when your host already meets the requirements.
-
-After setup, return to your app repository and use `pp`. You do not need to rerun Ansible to ship an application change. Forgejo hosting and CI runner provisioning live separately in [git-host-ansible](https://git.domi.ninja/domi-ninja/git-host-ansible).
-
-## Source layout
-
-```text
-cmd/deploy/       CLI entrypoint, built and installed as pp
-internal/deploy/  Deployment implementation
-docs/             Guides, design notes and security review
-examples/         Application deployment configs
-infra/ansible/    Occasional server provisioning
-tickets/          Implementation work
+```sh
+cd /path/to/your-app
+pp init
+# Edit deploy.yml with your host, domain, container port and health endpoint.
+pp plan
+pp deploy
+pp status
 ```
 
-The `docs/deployment-*.md` files contain design notes; [deploy-cli.md](docs/deploy-cli.md) describes current behavior.
+`init` refuses to overwrite a config and adds ignore rules for state and env files. Keep secrets out of Git and the build context. Preserve `.deploy/`; it contains release history, old runtime secrets and recovery artifacts. Back up application data separately.
 
-## What does `pp` stand for?
+Use [deployment examples](examples/README.md) for a static website, a Go app with SQLite or a self-hosted Convex app. These are templates to copy into your app, not standalone applications.
 
-- **Painless Production.** The official name and the promise we're trying to keep.
-- **Push & Pray.** Historically accurate.
-- **Predictable Production.** The engineering goal.
-- **Pocket Platform.** Small deployment tool, no platform circus.
+## Guides
+
+- [Getting started](docs/GETTING_STARTED.md) covers installation and host setup.
+- [Commands and deployment behavior](docs/deploy-cli.md) covers releases, status, ports and retention.
+- [Configuration](docs/configuration.md) lists implemented fields and defaults.
+- [Recovery](docs/recovery.md) explains rollback limits and saved inputs.
+- [Security](docs/security-review-deployment.md) explains credentials and host trust.
+- [Development](docs/development.md) covers builds and isolated validation.

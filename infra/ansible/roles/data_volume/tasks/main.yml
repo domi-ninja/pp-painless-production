@@ -51,7 +51,7 @@
     mode: "0755"
 
 - name: Mount data volume
-  ansible.builtin.mount:
+  ansible.posix.mount:
     path: "{{ data_volume_path }}"
     src: "{{ data_volume_src }}"
     fstype: "{{ data_volume_fstype }}"

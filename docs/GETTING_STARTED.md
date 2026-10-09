@@ -32,6 +32,8 @@ For a new Ubuntu 22.04+ host, work from the tool's clone:
 
 ```sh
 cd infra/ansible
+python3 -m pip install -r requirements.txt
+ansible-galaxy collection install -r requirements.yml
 cp inventory/prod.example.yml inventory/prod.local.yml
 cp host_vars/prod.example.yml host_vars/prod-1.local.yml
 ```
@@ -47,7 +49,7 @@ ansible-playbook -i inventory/prod.local.yml --limit prod-1 \
   playbooks/prod-server.yml
 ```
 
-This explicitly loads the baseline settings and your local overrides; the `.local.yml` filename is not automatically associated with a host. Replace `prod-1` with your inventory hostname in both the filename and `--limit`. Leave storage relocation disabled unless needed. Git hosting and CI provisioning live in [git-host-ansible](https://git.domi.ninja/domi-ninja/git-host-ansible); CI runners require separate hosts. For later provisioning runs, update the inventory to use the configured admin user instead of root.
+This explicitly loads the baseline settings and your local overrides; the `.local.yml` filename is not automatically associated with a host. Replace `prod-1` with your inventory hostname in both the filename and `--limit`. Leave storage relocation disabled unless needed. Git hosting and CI require separate hosts and provisioning. For later provisioning runs, update the inventory to use the configured admin user instead of root.
 
 Verify a fresh SSH connection and Docker access:
 
@@ -82,11 +84,11 @@ For a fuller starting point, choose a sample instead of the generated starter:
 
 - [Simple website](../examples/simple-website/README.md): a pnpm frontend built into an nginx container, with a health check and HTTPS route.
 - [Stateful Go website](../examples/stateful-go-website/README.md): a Go app with SQLite migrations, a persistent volume and a required secret.
-- [Convex website](../examples/convex-website/README.md): a frontend, Convex backend and dashboard, Postgres and MinIO, with setup and deployment hooks.
+- [Convex website](../examples/convex-website/README.md): a frontend, Convex backend and dashboard, Postgres and SeaweedFS, with setup and deployment hooks.
 
 These are deployment templates, not complete runnable apps. Read the sample's README for its expected application layout. Copy the needed files into your app, merging ignore rules and adapting any existing Dockerfile or scripts. Replace the sample project name, SSH target and domains, match the build output and container port to your app, and create any required env file with your own secrets.
 
-Commit `deploy.yml`. Keep secrets out of Git and the Docker build context. `pp init` adds `.deploy/` to `.gitignore` and `.deploy` to `.dockerignore`; add your secret files separately.
+Commit `deploy.yml`. Keep secrets out of Git and the Docker build context. `pp init` ignores deployment state and env files in both Git and Docker contexts, while retaining env examples. Review any other secret inputs separately.
 
 ```sh
 pp plan
@@ -96,7 +98,7 @@ pp status
 
 `plan` does not deploy, though it can upgrade local state. Review the selected host and environment before running `pp`, which performs the deployment. Config paths are relative to the application's working directory.
 
-Preserve `.deploy/`: it contains local state and rollback artifacts. See the [version migration guide](deploy-cli.md#migrating-an-existing-deployment) and [deployment security review](security-review-deployment.md) before trusting this experimental tool with production secrets.
+Preserve `.deploy/`: it contains local state and rollback artifacts. See the [version migration guide](deploy-cli.md#migrating-an-existing-deployment) and [deployment security guide](security-review-deployment.md) before trusting this experimental tool with production secrets.
 
 pp automatically keeps three successful releases and one failed attempt, while protecting current and previous releases. Run `pp cleanup --dry-run` to preview expired bundles and image references. For CI, reuse the checkout and its `.deploy/` directory between jobs. See [retention and cleanup](deploy-cli.md#retention-and-cleanup) for limits and retry behavior.
 

@@ -1,0 +1,47 @@
+name: Validate
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Go tests and analysis
+        run: |
+          go test -race ./...
+          go vet ./...
+          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Install host test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-server
+          python3 -m pip install -r infra/ansible/requirements.txt
+          cd infra/ansible
+          ansible-galaxy collection install -r requirements.yml
+      - name: Check helper scripts
+        shell: bash
+        run: |
+          while IFS= read -r file; do bash -n "$file"; done < <(rg --files examples --glob '*.sh')
+          while IFS= read -r file; do node --check "$file"; done < <(rg --files examples --glob '*.cjs')
+          node --test examples/convex-website/scripts/bootstrap.test.cjs
+      - name: Check host configuration
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 infra/ansible/tests/test_host_security.py
+          python3 infra/ansible/tests/test_access.py
+          python3 infra/ansible/tests/test_storage.py
+          cd infra/ansible
+          ansible-playbook -i inventory/prod.example.yml playbooks/prod-server.yml --syntax-check

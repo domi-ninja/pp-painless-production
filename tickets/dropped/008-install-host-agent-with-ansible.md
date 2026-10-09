@@ -1,10 +1,10 @@
-# 008 - Install Host Agent With Ansible
+# 008 - Install host agent with Ansible
 
 ## Goal
 
 Install and manage the Go host agent on prod servers using Ansible.
 
-## Depends On
+## Dependencies
 
 - 007
 
@@ -23,7 +23,7 @@ Install and manage the Go host agent on prod servers using Ansible.
 - Handler for service restart.
 - README for provisioning and upgrade.
 
-## Acceptance Criteria
+## Acceptance
 
 - Running the playbook installs and starts the agent.
 - Re-running the playbook is idempotent.

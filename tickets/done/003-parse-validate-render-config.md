@@ -4,7 +4,7 @@
 
 Implement config loading, schema validation, env validation, and template rendering.
 
-## Depends On
+## Dependencies
 
 - 001
 - 002
@@ -27,7 +27,7 @@ Implement config loading, schema validation, env validation, and template render
 - Template rendering module.
 - Test fixtures for valid and invalid configs.
 
-## Acceptance Criteria
+## Acceptance
 
 - Unknown required references fail before build/apply.
 - Missing env sources or required env values fail before touching prod.

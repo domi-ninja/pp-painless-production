@@ -1,10 +1,10 @@
-# 009 - Apply Compose Releases On Hosts
+# 009 - Apply Compose releases on hosts
 
 ## Goal
 
 Apply uploaded compose bundles on each host and record release state.
 
-## Depends On
+## Dependencies
 
 - 006
 - 008
@@ -25,7 +25,7 @@ Apply uploaded compose bundles on each host and record release state.
 - Deployment metadata writer.
 - Failure handling path that preserves logs.
 
-## Acceptance Criteria
+## Acceptance
 
 - Apply fails if SSH preflight fails.
 - Apply does not proceed if required image tags are missing.

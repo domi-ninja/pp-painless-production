@@ -1,10 +1,10 @@
-# 005 - Build And Tag Local Images
+# 005 - Build and tag local images
 
 ## Goal
 
 Build deployment images locally and tag them with deterministic release metadata.
 
-## Depends On
+## Dependencies
 
 - 003
 
@@ -23,7 +23,7 @@ Build deployment images locally and tag them with deterministic release metadata
 - Image export module.
 - Tests around tag generation and build command planning.
 
-## Acceptance Criteria
+## Acceptance
 
 - Prod hosts never build images.
 - Build fails before publish if Docker is unavailable.

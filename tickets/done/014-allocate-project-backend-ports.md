@@ -1,4 +1,4 @@
-# 014 - Allocate Project Backend Ports
+# 014 - Allocate project backend ports
 
 ## Goal
 
@@ -14,9 +14,9 @@ Avoid port collisions between projects by letting `pp` allocate stable backend p
 - Render compose with allocated `127.0.0.1:<port>:<target>` bindings.
 - Allow Caddy routes to infer targets from service ports.
 
-## Acceptance Criteria
+## Acceptance
 
 - Existing fixed ports still render unchanged.
 - Auto ports are stable per `project:service:target` key.
 - Caddy routes can omit explicit `target` when the service has one matching port.
-- Verified with `blog.domi.ninja` on `p3`.
+- Validate allocation using isolated host-command fixtures.

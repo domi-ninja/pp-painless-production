@@ -1,10 +1,10 @@
-# 006 - Transfer Images And Bundles Over SSH
+# 006 - Transfer images and bundles over SSH
 
 ## Goal
 
 Publish release artifacts to target hosts using SSH-first image transfer.
 
-## Depends On
+## Dependencies
 
 - 004
 - 005
@@ -25,7 +25,7 @@ Publish release artifacts to target hosts using SSH-first image transfer.
 - Image load command runner.
 - Transfer progress and error reporting.
 
-## Acceptance Criteria
+## Acceptance
 
 - Each host receives only its required compose/env bundle.
 - Image transfer is idempotent for the same release ID.

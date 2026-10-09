@@ -2,7 +2,7 @@
 
 This playbook prepares Ubuntu 22.04+ servers for application deployment with `pp`. Run it when adding a host or changing its system configuration, not for every application release.
 
-It configures SSH access, firewall rules, Docker and optional Caddy or persistent storage. [Git hosting and CI runners](https://git.domi.ninja/domi-ninja/git-host-ansible) have their own repository and playbooks. Enabling their old role flags here fails before provisioning.
+It configures SSH access, firewall rules, Docker and optional Caddy or persistent storage. Provision Git hosting and CI runners separately. Enabling their old role flags here fails before provisioning.
 
 ## First run
 
@@ -10,6 +10,8 @@ Install Ansible on your workstation, then copy the examples:
 
 ```sh
 cd infra/ansible
+python3 -m pip install -r requirements.txt
+ansible-galaxy collection install -r requirements.yml
 cp inventory/prod.example.yml inventory/prod.local.yml
 cp host_vars/prod.example.yml host_vars/prod-1.local.yml
 ```

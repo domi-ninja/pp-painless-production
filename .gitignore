@@ -11,3 +11,5 @@ scripts/.master-token
 
 bin/
 __pycache__/
+
+.venv/

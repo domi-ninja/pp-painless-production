@@ -1,13 +1,11 @@
 # Deployment examples
 
-These examples started from sibling repositories, then replaced project-specific names and domains with consistent placeholders. Replace `deploy@example.com` and the `example.com` domains before using them.
+Copy a template into your app, replace the project, host and domains, and merge the ignore rules. Application source and dependency lockfiles are not included.
 
-- `simple-website/` shows one built web image at `simple.example.com`.
-- `convex-website/` shows the more complex setup needed to run Convex in self-hosted mode. It lets a side project use Convex's database and backend functions while hosting the services on your own server.
-- `stateful-go-website/` shows a required secret, persistent volume, migrations, and a custom entrypoint at `stateful.example.com`.
+- [Simple website](simple-website/README.md) builds a pnpm frontend and serves it with nginx.
+- [Stateful Go website](stateful-go-website/README.md) runs a Go app with SQLite, uploads and a persistent volume.
+- [Convex website](convex-website/README.md) runs Convex with Postgres, SeaweedFS and a private dashboard.
 
-Application source and dependency lockfiles are not duplicated here. No production environment file or secret is included.
+Run `pp plan` before deploying. Use separate data paths, ports and credentials for independent environments. Preserve an existing app's `.deploy` state and data names when updating it. Never copy existing state or secrets into a new deployment.
 
-Build tags use `${release}` so a new release does not reuse a mutable commit tag. Public smoke checks complement container health checks. Start with `pp plan`, deploy from a reviewed checkout, and compare `pp status` with the intended commit afterward. Preserve the app's existing `.deploy` state and data identifiers when updating it; discard copied state only when creating an independent deployment.
-
-The Convex example uses a narrow function-environment allowlist, private dashboard, and recoverable credential rotation. Read its README before adapting an existing installation; do not copy fresh keys over a running application's environment.
+Read [image updates](images.md) and [backups and isolated restore](backups.md) before changing stateful services.

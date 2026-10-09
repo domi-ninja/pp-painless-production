@@ -217,7 +217,7 @@
   when: swap_file_size_mb | int > 0
 
 - name: Persist swap file in fstab
-  ansible.builtin.mount:
+  ansible.posix.mount:
     name: none
     src: "{{ swap_file_path }}"
     fstype: swap

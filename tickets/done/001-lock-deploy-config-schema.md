@@ -1,13 +1,13 @@
-# 001 - Lock Deploy Config Schema
+# 001 - Define deployment config schema
 
 ## Goal
 
 Finalize `deploy.yml` v1 as the committed desired-state format for one project.
 
-## Depends On
+## Dependencies
 
-- `deployment-config-schema.md`
-- `deployment-pipeline-plan.md`
+- [Current configuration reference](../../docs/configuration.md)
+- [Current deployment behavior](../../docs/deploy-cli.md)
 
 ## Scope
 
@@ -26,7 +26,7 @@ Finalize `deploy.yml` v1 as the committed desired-state format for one project.
 - Maximal example covering web, worker, volume, migration, DB rollback, and smoke check.
 - List of rejected/non-goals for v1.
 
-## Acceptance Criteria
+## Acceptance
 
 - A future parser can be implemented without guessing field behavior.
 - The schema supports one image deployed to multiple hosts.
