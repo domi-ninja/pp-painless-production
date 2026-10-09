@@ -1,71 +1,25 @@
 ---
-- name: Require absolute Docker data root path
+- name: Install Docker configuration and relocation helper
+  ansible.builtin.copy:
+    src: relocate-docker.py
+    dest: /usr/local/lib/pp/relocate-docker.py
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Apply Docker configuration with recoverable storage relocation
+  ansible.builtin.command:
+    argv: [/usr/local/lib/pp/relocate-docker.py]
+    stdin: "{{ {'relocate': docker_data_root_enabled | bool, 'target': docker_data_root_path, 'backup_confirmed': docker_data_root_backup_confirmed | bool, 'daemon_config': docker_daemon_config} | to_json }}"
+  register: pp_docker_configuration
+  changed_when: "pp_docker_configuration.stdout == 'changed'"
+  failed_when: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Report Docker configuration errors without echoing settings
   ansible.builtin.assert:
     that:
-      - docker_data_root_path.startswith('/')
-      - docker_data_root_path != '/'
-    fail_msg: "docker_data_root_path must be an absolute non-root path."
-
-- name: Check Docker CLI is available
-  ansible.builtin.command: docker --version
-  changed_when: false
-
-- name: Read current Docker data root
-  ansible.builtin.command: docker info --format {% raw %}'{{.DockerRootDir}}'{% endraw %}
-  register: docker_current_root
-  changed_when: false
-
-- name: Ensure Docker data root directory exists
-  ansible.builtin.file:
-    path: "{{ docker_data_root_path }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0711"
-
-- name: Stop Docker before moving data root
-  ansible.builtin.systemd:
-    name: docker
-    state: stopped
-  when: docker_current_root.stdout != docker_data_root_path
-
-- name: Stop Docker socket before moving data root
-  ansible.builtin.systemd:
-    name: docker.socket
-    state: stopped
-  failed_when: false
-  when: docker_current_root.stdout != docker_data_root_path
-
-- name: Copy existing Docker state into new data root
-  ansible.builtin.command:
-    argv:
-      - rsync
-      - -aHAX
-      - --numeric-ids
-      - /var/lib/docker/
-      - "{{ docker_data_root_path }}/"
-  when: docker_current_root.stdout != docker_data_root_path
-
-- name: Install Docker daemon config with data-root
-  ansible.builtin.copy:
-    dest: /etc/docker/daemon.json
-    content: "{{ docker_data_root_config | combine({'data-root': docker_data_root_path}) | to_nice_json }}\n"
-    owner: root
-    group: root
-    mode: "0644"
-  notify: restart docker
-
-- name: Start Docker
-  ansible.builtin.service:
-    name: docker
-    enabled: true
-    state: started
-
-- name: Flush Docker restart if daemon config changed
-  ansible.builtin.meta: flush_handlers
-
-- name: Verify Docker is using configured data root
-  ansible.builtin.command: docker info --format {% raw %}'{{.DockerRootDir}}'{% endraw %}
-  register: docker_verified_root
-  changed_when: false
-  failed_when: docker_verified_root.stdout != docker_data_root_path
+      - pp_docker_configuration.rc == 0
+    fail_msg: "Docker configuration failed: {{ pp_docker_configuration.stderr }}"
+  when: not ansible_check_mode

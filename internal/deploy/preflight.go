@@ -116,5 +116,21 @@ case "$arch" in x86_64) arch=amd64;; aarch64) arch=arm64;; esac
 done
 `
 	}
-	return script
+	return script + requiredMountScript(base)
+}
+
+func requiredMountScript(base string) string {
+	return `
+mounts=` + shellQuote(base+"/required-mounts.json") + `
+[ ! -L "$mounts" ] || { echo 'Required mount record must not be a symlink' >&2; exit 1; }
+if [ -f "$mounts" ]; then
+ python3 - "$mounts" <<'PP_MOUNTS'
+import json, os, subprocess, sys
+for mount in json.load(open(sys.argv[1])):
+ result = subprocess.run(['findmnt', '-rn', '-M', mount['path'], '-o', 'SOURCE'], capture_output=True, text=True)
+ if result.returncode != 0 or os.path.realpath(result.stdout.strip()) != os.path.realpath(mount['source']):
+  raise SystemExit('Required application data mount is missing or has another device; stop and inspect the mount before deploying')
+PP_MOUNTS
+fi
+`
 }

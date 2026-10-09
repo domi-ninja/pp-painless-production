@@ -491,6 +491,9 @@ func pullHostImagesScript(plan Plan, host HostBundle) string {
 }
 
 func (d Deployer) ComposeUp(plan Plan, host HostBundle, services []string, wait bool) error {
+	if err := d.Runner.SSHScript(d.Root, host.SSH, requiredMountScript("/etc/pp")); err != nil {
+		return err
+	}
 	args := []string{"docker compose -f compose.yml -p " + shellQuote(plan.Config.Project.ResourceID()) + " up -d --pull never"}
 	if wait {
 		args[0] += " --wait --wait-timeout 300"

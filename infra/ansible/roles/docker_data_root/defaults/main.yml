@@ -1,10 +1,4 @@
 ---
 docker_data_root_enabled: false
 docker_data_root_path: /var/lib/docker
-docker_data_root_config:
-  log-driver: json-file
-  log-opts:
-    max-size: 50m
-    max-file: "5"
-  live-restore: true
-  userland-proxy: false
+docker_data_root_backup_confirmed: false

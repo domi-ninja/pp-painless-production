@@ -48,3 +48,13 @@ The playbook owns the admin account's complete `authorized_keys` file. Removing 
 The managed SSH fragment loads before cloud defaults. The playbook checks `sshd -T` for the admin account and root before reloading, and restores its previous fragments if verification fails. A setting before the `Include` line or a matching `Match` block can still override it; the effective-setting check will fail.
 
 UFW rules carry a `pp-managed` comment. The playbook adds the desired rules first, then removes obsolete rules with that comment. It keeps both the configured SSH port and the current inventory connection port open. Switch the inventory to the new port after verifying access, then rerun to retire the old port. Existing rules without that comment remain under operator control; inspect and remove obsolete unmarked rules when adopting an existing host. Docker-published ports can bypass UFW, so bind application ports to loopback.
+
+## Changing storage
+
+Set `data_volume_backup_confirmed: true` only after checking the device and a usable backup, or confirming that the new device has no data to preserve. The role refuses a mount point that contains fallback data, another mounted device, old mount points to remove, or `nofail`. Stop consumers and move existing mounts deliberately before rerunning.
+
+The host records the expected mounted device. Docker depends on that mount, and pp verifies it before deployment and service startup. If a database looks empty after boot, check `findmnt -M /data` before initializing anything. An unmounted directory can contain a separate database on the root filesystem.
+
+For Docker relocation, set `docker_data_root_enabled: true`, `docker_data_root_path` and `docker_data_root_backup_confirmed: true`. The destination must be empty and must not overlap the current root. The helper stops running containers and Docker, copies from the root returned by `docker info`, and preserves that source. It merges daemon settings once, verifies the new root, then restarts the stopped containers. A failure restores the prior daemon config and restarts Docker against its original data.
+
+`/etc/docker/daemon.json.pp-before` holds the previous daemon config. A killed provisioning client may require restoring it and starting Docker manually. Inspect a partial destination copy before retrying. Back up application databases separately, and include `/var/lib/containerd` when Docker uses its separate [containerd image store](https://docs.docker.com/engine/storage/containerd/). Disabling the storage role does not unmount data or remove its startup dependency.

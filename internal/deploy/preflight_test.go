@@ -30,3 +30,18 @@ func TestHostPreflightRejectsOldComposeAndWrongPlatform(t *testing.T) {
 		})
 	}
 }
+
+func TestMissingOrWrongDataMountBlocksStartup(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "pp")
+	writeNestedFile(t, root, "pp/required-mounts.json", `[{"path":"/data","source":"/dev/expected"}]`)
+	writeExecutable(t, root, "findmnt", "#!/bin/sh\necho \"$PP_MOUNT_SOURCE\"\n")
+	for _, source := range []string{"/dev/expected", "/dev/wrong", ""} {
+		cmd := exec.Command("sh", "-c", requiredMountScript(base))
+		cmd.Env = append(os.Environ(), "PATH="+root+string(os.PathListSeparator)+os.Getenv("PATH"), "PP_MOUNT_SOURCE="+source)
+		out, err := cmd.CombinedOutput()
+		if (err != nil) != (source != "/dev/expected") {
+			t.Fatalf("mount %q: %v %s", source, err, out)
+		}
+	}
+}

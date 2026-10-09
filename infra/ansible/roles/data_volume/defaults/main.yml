@@ -1,7 +1,8 @@
 ---
 data_volume_enabled: false
+data_volume_backup_confirmed: false
 data_volume_src: ""
 data_volume_path: /data
 data_volume_fstype: ext4
-data_volume_opts: "discard,nofail,defaults"
+data_volume_opts: "discard,defaults"
 data_volume_previous_mountpoints: []

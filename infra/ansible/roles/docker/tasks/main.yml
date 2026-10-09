@@ -55,15 +55,6 @@
     group: root
     mode: "0755"
 
-- name: Install Docker daemon config
-  ansible.builtin.template:
-    src: daemon.json.j2
-    dest: /etc/docker/daemon.json
-    owner: root
-    group: root
-    mode: "0644"
-  notify: restart docker
-
 - name: Add users to docker group
   ansible.builtin.user:
     name: "{{ item }}"
@@ -77,3 +68,7 @@
     name: docker
     enabled: true
     state: started
+
+- name: Configure Docker once after installation
+  ansible.builtin.include_role:
+    name: docker_data_root

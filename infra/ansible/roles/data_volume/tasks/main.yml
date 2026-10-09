@@ -1,10 +1,46 @@
 ---
-- name: Require a data volume source
+- name: Require a verified data volume and backup confirmation
   ansible.builtin.assert:
     that:
       - data_volume_src | length > 0
-      - data_volume_path | length > 1
-    fail_msg: "Set data_volume_src and data_volume_path before enabling data_volume."
+      - data_volume_path.startswith('/')
+      - data_volume_path != '/'
+      - data_volume_path is match('^/[A-Za-z0-9_./-]+$')
+      - data_volume_backup_confirmed | bool
+      - data_volume_previous_mountpoints | length == 0
+      - "'nofail' not in data_volume_opts.split(',')"
+    fail_msg: "Confirm a backup, use an absolute mount path without nofail, and move old mounts manually after stopping their consumers."
+
+- name: Verify a data mount before changing fstab
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import os, stat, subprocess, sys
+        source, target, filesystem = sys.argv[1:]
+        if source.startswith(('UUID=', 'LABEL=')):
+            source = subprocess.check_output(['findfs', source], text=True).strip()
+        source = os.path.realpath(source)
+        if not stat.S_ISBLK(os.stat(source).st_mode):
+            raise SystemExit('data volume source must be a block device')
+        actual_fs = subprocess.check_output(['blkid', '-s', 'TYPE', '-o', 'value', source], text=True).strip()
+        if actual_fs != filesystem:
+            raise SystemExit('device filesystem differs from data_volume_fstype')
+        if os.path.realpath(target) != target:
+            raise SystemExit('data mount path must not contain symlinks')
+        existing = subprocess.run(['findmnt', '-rn', '-M', target, '-o', 'SOURCE'], capture_output=True, text=True)
+        if existing.returncode == 0 and os.path.realpath(existing.stdout.strip()) != source:
+            raise SystemExit('another device is mounted there; stop consumers and move it manually')
+        if existing.returncode != 0 and os.path.isdir(target) and os.listdir(target):
+            raise SystemExit('mount point contains root-filesystem data; inspect and move it before mounting')
+        print(source)
+      - "{{ data_volume_src }}"
+      - "{{ data_volume_path }}"
+      - "{{ data_volume_fstype }}"
+  register: pp_data_device
+  changed_when: false
+  check_mode: false
 
 - name: Create data mount point
   ansible.builtin.file:
@@ -13,13 +49,6 @@
     owner: root
     group: root
     mode: "0755"
-
-- name: Remove previous data volume mount points
-  ansible.builtin.mount:
-    path: "{{ item }}"
-    state: absent
-  loop: "{{ data_volume_previous_mountpoints }}"
-  when: item != data_volume_path
 
 - name: Mount data volume
   ansible.builtin.mount:
@@ -30,3 +59,41 @@
     dump: "0"
     passno: "0"
     state: mounted
+
+- name: Verify the expected mounted device
+  ansible.builtin.command:
+    argv: [findmnt, -rn, -M, "{{ data_volume_path }}", -o, SOURCE]
+  register: pp_mounted_device
+  changed_when: false
+  failed_when: pp_mounted_device.rc != 0 or pp_mounted_device.stdout != pp_data_device.stdout
+  when: not ansible_check_mode
+
+- name: Record the required application data mount
+  ansible.builtin.copy:
+    dest: /etc/pp/required-mounts.json
+    content: "{{ [{'path': data_volume_path, 'source': pp_data_device.stdout}] | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create Docker mount dependency directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Require the data mount before Docker starts
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service.d/pp-data-mount.conf
+    content: "[Unit]\nRequiresMountsFor={{ data_volume_path }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  register: pp_mount_dependency
+
+- name: Reload systemd mount dependencies
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: pp_mount_dependency.changed

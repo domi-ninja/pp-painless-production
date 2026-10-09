@@ -23,8 +23,6 @@
       when: data_volume_enabled | bool
     - role: docker
       when: docker_enabled | bool
-    - role: docker_data_root
-      when: docker_data_root_enabled | bool
     - role: coolify
       when: coolify_enabled | bool
     - role: reverse_proxy

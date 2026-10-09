@@ -25,13 +25,15 @@ docker_users:
 docker_enabled: true
 docker_data_root_enabled: false
 docker_data_root_path: /var/lib/docker
+docker_data_root_backup_confirmed: false
 
 # Optional persistent data volume. Use host_vars for real device IDs.
 data_volume_enabled: false
+data_volume_backup_confirmed: false
 data_volume_src: ""
 data_volume_path: /data
 data_volume_fstype: ext4
-data_volume_opts: "discard,nofail,defaults"
+data_volume_opts: "discard,defaults"
 data_volume_previous_mountpoints: []
 
 # Optional Coolify install. Keep host-specific URL and storage settings in
