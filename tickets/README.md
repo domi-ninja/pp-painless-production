@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [017 - update toolchain and security guide ](017-update-toolchain-and-security-guide.md)
 - [012 - implement rollback ](012-implement-rollback.md)
 - [018 - define recovery and readiness ](018-define-recovery-and-readiness.md)
 - [011 - implement status and deployment records ](011-implement-status-and-deployment-records.md)
@@ -25,6 +24,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [Completed 015](done/015-scope-hook-identity.md)
 
 - [Completed 016](done/016-protect-secret-inputs-and-output.md)
+
+- [Completed 017](done/017-update-toolchain-and-security-guide.md)
 
 ## Earlier work
 

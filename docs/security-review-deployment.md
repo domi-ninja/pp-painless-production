@@ -1,100 +1,27 @@
-# Deployment Security Review
+# Deployment security
 
-Scope: obvious security gaps in the new deployment system, including the Go deploy CLI and Ansible deployment/CI roles.
+pp runs trusted application code and configuration with the deployment operator's permissions. Docker access grants control of the host. Project and environment identities prevent accidental overlap; they do not isolate hostile tenants.
 
-Updated 2026-09-16. The findings below are addressed in code and covered by tests. Original descriptions are retained for context. Runner isolation still depends on deploying to a dedicated VM; existing infrastructure and historical rollback bundles are not automatically migrated. Dependency and image vulnerability scans remain outstanding.
+## Secrets
 
-## Findings
+Keep secrets in ignored env files and outside Docker build contexts. `env.required` selects the keys passed to services, hooks, checks and migrations. Whole-file injection requires `include_all: true`. Child processes inherit ordinary operator tool settings.
 
-### Fixed placement policy: CI runners require isolated VMs
+Build arguments and Caddy route templates are public configuration. Use runtime env files for secrets. Command arguments and check URLs must not contain credentials. pp omits argv and URL queries from its own diagnostics, but application scripts still control their output.
 
-Runner roles, the dedicated-runner playbook and their tests now live in [git-host-ansible](https://git.domi.ninja/domi-ninja/git-host-ansible). The pp application playbook refuses Git/CI role flags, and the CLI still refuses hosts marked for CI. The following records the policy implemented before extraction.
+Release directories are private. Old releases contain old runtime secrets until retention removes them. Preserve current and previous releases for recovery, and protect backups of `.deploy` as secret-bearing data.
 
-The production playbook refuses runners. Runner roles require an explicit dedicated-host declaration, runner-only inventory membership, and no existing pp containers. Forgejo DinD uses a shared Unix socket instead of unauthenticated TCP. Privileged DinD and Woodpecker's host Docker access still grant control of the dedicated VM; never accept untrusted jobs there. Existing hosts require operator migration, not an automatic live move. Original finding follows.
+## Host access
 
-The Forgejo runner starts privileged Docker-in-Docker with unauthenticated TCP Docker on port 2375, and the Woodpecker agent mounts `/var/run/docker.sock`. Any workflow that reaches these agents can control Docker and likely root-equivalent host resources.
+Only trusted operators and deployment jobs should have the SSH key and Docker permissions. Run untrusted CI work on separate hosts. pp refuses a host marked with `/etc/pp/ci-runner-host`; the application playbook rejects CI role flags.
 
-References:
-- `infra/ansible/roles/forgejo_runner/templates/compose.yml.j2:4`
-- `infra/ansible/roles/forgejo_runner/templates/compose.yml.j2:8`
-- `infra/ansible/roles/woodpecker_agent/templates/compose.yml.j2:8`
+Published container ports default to loopback. A public binding needs an explicit Docker-aware firewall or upstream firewall policy. UFW alone does not restrict Docker-published ports. See [Docker firewall behavior](https://docs.docker.com/engine/network/packet-filtering-firewalls/#docker-and-ufw).
 
-Recommendation: run these only on isolated runner VMs, not shared production hosts. Restrict deployment workflows to trusted refs, keep runner scope narrow, and avoid host Docker socket access for untrusted jobs.
+Generated routes validate hostnames and upstream origins. Custom route templates and shell hooks are trusted code. Config and artifact paths stay inside the application checkout; state and ignore-file writes reject symlink destinations.
 
-### Fixed: SSH target option injection
+## Updates and verification
 
-Config validation and every deployment SSH entrypoint reject options, whitespace and shell syntax. Use `user@hostname` or an SSH config alias; configure ports and jump hosts in SSH config. Original finding follows.
+Use a supported, patched Go compiler, starting with Go 1.26.9. Rebuild pp after compiler updates. Check source dependencies with `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`. Check the installed binary's compiler with `go version -m "$(command -v pp)"`.
 
-`hosts.*.ssh` is only checked for non-empty, then passed directly to `ssh` and `scp`. A malicious config value beginning with SSH options, such as a `ProxyCommand`, can turn deploy into local command execution on the deploy machine.
+Review infrastructure image updates separately from app releases. Image pinning makes a recorded release repeatable; it does not check for new vulnerabilities. Keep data backups and test restoration before a database or storage upgrade.
 
-References:
-- `internal/deploy/config.go:168`
-- `internal/deploy/operations.go:235`
-- `internal/deploy/operations.go:239`
-
-Recommendation: model SSH as structured fields such as `user`, `host`, and `port`, or strictly reject values beginning with `-` and invoke `ssh`/`scp` with `--` before the target where supported.
-
-### Fixed: remote secret env files are permissioned after upload
-
-Release directories are now `0700` before transfer; Compose and env files are `0600` afterward. Tests cover new and reused paths. The original finding follows.
-
-Local rendered env files are written as `0600`, but remote upload uses plain `scp` into directories created by `mkdir -p` with default remote permissions. There is no remote `chmod` or `install -m 0600`.
-
-References:
-- `internal/deploy/compose.go:235`
-- `internal/deploy/operations.go:198`
-- `internal/deploy/operations.go:210`
-
-Recommendation: create remote env directories as `0700`, upload to a temporary path, then install env files with `0600`. Consider removing stale env files from previous releases if secrets rotate.
-
-### Fixed: services receive only declared env keys
-
-Service env files now use `env.required` as an allowlist. Whole-file injection requires `include_all: true`. Tests verify that database and storage services do not receive each other's secrets. The original finding follows.
-
-`env.required` is validation-only. When a service has an env source, every key from that source file is rendered into that service's env file, including secrets the service did not declare.
-
-References:
-- `internal/deploy/config.go:277`
-- `internal/deploy/compose.go:220`
-
-Recommendation: render only declared keys, or introduce an explicit allowlist field. If whole-file behavior is desired, require a deliberate opt-in such as `include_all: true`.
-
-### Fixed: generated Caddy route injection
-
-Generated routes validate hostnames and HTTP(S) origins during config validation and rendering. Whitespace, Caddy syntax, credentials and URL suffixes are rejected. Full `route_files` templates remain explicitly trusted Caddy configuration. Original finding follows.
-
-`route.host` and `route.target` are written directly into Caddy config. `target` only gets URL parsing and `host` is not syntax-validated, so crafted committed config can inject arbitrary Caddy directives before reload.
-
-References:
-- `internal/deploy/compose.go:142`
-- `internal/deploy/compose.go:148`
-- `internal/deploy/compose.go:150`
-- `internal/deploy/config.go:217`
-
-Recommendation: reject control characters, braces, whitespace, and newlines in route host/target fields. Validate route hosts as DNS names or explicit supported wildcard patterns.
-
-### Fixed: config paths escape the repository boundary
-
-Config files, env sources, build contexts, Dockerfiles and route-file sources must stay inside the application repository. Validation rejects absolute paths, traversal and escaping or dangling symlinks. Tests include missing files below symlinked parents. Explicit hooks remain trusted commands, not sandboxed code. Original finding follows.
-
-`env.source` is joined and opened without rejecting `..` or absolute paths. Docker build context and Dockerfile are only checked for non-empty, not constrained to the repository.
-
-References:
-- `internal/deploy/config.go:154`
-- `internal/deploy/config.go:272`
-- `internal/deploy/operations.go:124`
-- `internal/deploy/operations.go:134`
-
-Recommendation: require relative, clean, in-repo paths for env sources, build contexts, and Dockerfiles unless an explicit escape hatch is added.
-
-## Additional Notes
-
-Ignored local credential files are present in the working tree, including `scripts/.master-token`, but `git check-ignore` confirms that file is ignored and `git ls-files` did not show it as tracked. Secret contents were not inspected.
-
-Verification performed during review:
-
-```sh
-go test ./...
-```
-
-Result: passed.
+Database rollback and application hook recovery require explicit policies. Read the recovery instructions before depending on a release rollback for data restoration.

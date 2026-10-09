@@ -4,7 +4,7 @@ Keep two repositories separate: this tool's clone supplies `pp` and the server p
 
 ## 1. Clone and install
 
-On your deployment machine, you need Git, Go 1.23 or newer, Make, SSH/SCP and a working Docker daemon with Buildx for local image builds. Buildx must support the cache-pruning flags listed under [retention](deploy-cli.md#retention-and-cleanup). pp creates its own builder and downloads BuildKit on first use. Install Ansible there too if you will provision servers. The CLI uses Unix file locking, so use a Linux or macOS environment.
+On your deployment machine, you need Git, Go 1.26.9 or a newer supported, patched release, Make, SSH/SCP and a working Docker daemon with Buildx for local image builds. Buildx must support the cache-pruning flags listed under [retention](deploy-cli.md#retention-and-cleanup). pp creates its own builder and downloads BuildKit on first use. Install Ansible there too if you will provision servers. The CLI uses Unix file locking, so use a Linux or macOS environment.
 
 ```sh
 git clone https://github.com/domi-ninja/pp-painless-production.git
