@@ -132,3 +132,9 @@ Compose waits up to 300 seconds for services to run and for configured health ch
 Hooks and migrations default to a 300 second timeout. Set `timeout_seconds` to allow longer work. Interrupting pp cancels subprocesses, HTTP requests and DNS lookups. Cancellation does not prove that a migration stopped before changing data.
 
 After a completed migration and failed apply, pp runs the saved database rollback command before starting older containers. A failed database revert stops container recovery. A `restore_plan` always needs manual action. A failed forward migration may have changed data partially; pp reports that condition and does not guess how to undo it. Your migration and rollback commands must handle transactions and compatibility with services that are already running.
+
+## Inspecting a failed deployment
+
+`pp status` prints the local current release and the latest deploy or rollback attempt separately. It also queries recorded hosts over SSH, with a 15 second limit per host, and prints container release labels, state and health. A host error returns a failing exit status. Compare observed services with the expected local release; local success metadata does not prove the host still runs that release.
+
+Status needs deployment identity and local records, not current env files, build inputs or Git history. Per-host apply progress remains in the attempted release even if another host fails. Recovery checks and failures are recorded separately from the original apply checks.

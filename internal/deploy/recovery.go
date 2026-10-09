@@ -164,6 +164,10 @@ func validateRecoveryArtifact(root, bundle, path string) error {
 func (d Deployer) recoverRelease(current ReleaseRecord, target *ReleaseRecord, revertDatabase bool) (StepRecord, []CheckRecord, error) {
 	step := StepRecord{Status: "running", StartedAt: time.Now().UTC()}
 	var checks []CheckRecord
+	d.onHostStep = nil
+	if target != nil {
+		d.onHostStep = d.recordHostProgress(target)
+	}
 	run := func() error {
 		var plan Plan
 		if target != nil {

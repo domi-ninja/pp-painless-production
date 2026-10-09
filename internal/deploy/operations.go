@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ type Deployer struct {
 	ConfigPath  string
 	lockedHosts map[string]bool
 	minFreeMB   int64
+	onHostStep  func(string, string) error
 }
 
 func NewDeployer(root string, out io.Writer, errOut io.Writer) Deployer {
@@ -35,7 +37,7 @@ func NewDeployer(root string, out io.Writer, errOut io.Writer) Deployer {
 	}
 }
 
-func (d Deployer) Deploy() error {
+func (d Deployer) Deploy() (result error) {
 	unlock, err := d.operationLock()
 	if err != nil {
 		return err
@@ -89,14 +91,19 @@ func (d Deployer) Deploy() error {
 	if err := SaveRelease(d.Root, record); err != nil {
 		return err
 	}
+	finishAttempt, err := d.trackAttempt(&state, &record, "deploy")
+	if err != nil {
+		return err
+	}
+	defer finishAttempt(&result)
+	d.onHostStep = d.recordHostProgress(&record)
 
 	fmt.Fprintf(d.Out, "release: %s\n", plan.ReleaseID)
 	fmt.Fprintln(d.Out, "building image")
 	if err := d.BuildImages(plan, bundle); err != nil {
 		record.Status = "failed"
 		record.Apply = StepRecord{Status: "failed", Error: err.Error(), At: time.Now().UTC()}
-		_ = SaveRelease(d.Root, record)
-		return err
+		return errors.Join(err, SaveRelease(d.Root, record))
 	}
 
 	migrationRan := false
@@ -106,11 +113,15 @@ func (d Deployer) Deploy() error {
 		record.Migration = migrationRecord
 		if err != nil {
 			record.Status = "failed"
-			_ = SaveRelease(d.Root, record)
+			if saveErr := SaveRelease(d.Root, record); saveErr != nil {
+				return errors.Join(err, saveErr)
+			}
 			return fmt.Errorf("%w; migration may have partially changed data; inspect the database and follow its recovery procedure before retrying", err)
 		}
 		migrationRan = true
-		_ = SaveRelease(d.Root, record)
+		if err := SaveRelease(d.Root, record); err != nil {
+			return err
+		}
 	}
 
 	fmt.Fprintln(d.Out, "applying hosts")
@@ -122,7 +133,9 @@ func (d Deployer) Deploy() error {
 	if err != nil {
 		record.Status = "failed"
 		record.Apply = StepRecord{Status: "failed", Error: err.Error(), At: time.Now().UTC()}
-		_ = SaveRelease(d.Root, record)
+		if saveErr := SaveRelease(d.Root, record); saveErr != nil {
+			return errors.Join(err, saveErr)
+		}
 
 		var previous *ReleaseRecord
 		if state.CurrentReleaseID != "" {
@@ -132,8 +145,9 @@ func (d Deployer) Deploy() error {
 			}
 			previous = &saved
 		}
-		rollbackRecord, _, recoveryErr := d.recoverRelease(record, previous, migrationRan)
+		rollbackRecord, recoveryChecks, recoveryErr := d.recoverRelease(record, previous, migrationRan)
 		record.Rollback = rollbackRecord
+		record.RecoveryChecks = recoveryChecks
 		if saveErr := SaveRelease(d.Root, record); saveErr != nil {
 			return fmt.Errorf("%w; persist recovery: %v", err, saveErr)
 		}
@@ -155,13 +169,12 @@ func (d Deployer) Deploy() error {
 	if err := SaveRelease(d.Root, record); err != nil {
 		return err
 	}
-	if err := SaveState(d.Root, State{
-		ResourceID:        plan.Config.Project.ResourceID(),
-		Project:           plan.Config.Project.Name,
-		Environment:       plan.Config.Project.Environment,
-		CurrentReleaseID:  plan.ReleaseID,
-		PreviousReleaseID: state.CurrentReleaseID,
-	}); err != nil {
+	state.CurrentReleaseID = plan.ReleaseID
+	state.PreviousReleaseID = record.PreviousReleaseID
+	state.Project = plan.Config.Project.Name
+	state.Environment = plan.Config.Project.Environment
+	state.ResourceID = plan.Config.Project.ResourceID()
+	if err := SaveState(d.Root, state); err != nil {
 		return err
 	}
 
@@ -477,7 +490,18 @@ func (d Deployer) ComposeUp(plan Plan, host HostBundle, services []string, wait 
 		args[0] += " " + shellJoin(services)
 	}
 	composeCmd := "cd " + shellQuote(host.RemoteDir) + " && " + args[0]
-	return d.Remote(host.SSH, composeCmd)
+	if d.onHostStep != nil {
+		if err := d.onHostStep(host.ID, "applying"); err != nil {
+			return err
+		}
+	}
+	if err := d.Remote(host.SSH, composeCmd); err != nil {
+		return err
+	}
+	if d.onHostStep != nil {
+		return d.onHostStep(host.ID, "healthy: "+strings.Join(services, ","))
+	}
+	return nil
 }
 
 func (d Deployer) RunHooks(plan Plan, phase string) error {
@@ -734,38 +758,6 @@ func (d Deployer) Copy(local string, sshTarget string, remotePath string) error 
 	return d.Runner.Run(d.Root, "scp", local, sshTarget+":"+remotePath)
 }
 
-func (d Deployer) Status() error {
-	cfg, err := LoadConfig(d.Root, d.configPath())
-	if err != nil {
-		return err
-	}
-	state, err := LoadState(d.Root, cfg.Project)
-	if err != nil {
-		return err
-	}
-	if state.CurrentReleaseID == "" {
-		fmt.Fprintln(d.Out, "no deployments recorded")
-		return nil
-	}
-	record, err := LoadRelease(d.Root, cfg.Project, state.CurrentReleaseID)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(d.Out, "project: %s\n", state.Project)
-	fmt.Fprintf(d.Out, "environment: %s\n", state.Environment)
-	fmt.Fprintf(d.Out, "state_version: %d\nresources: %s\n", state.Version, state.ResourceID)
-	fmt.Fprintf(d.Out, "current: %s\n", state.CurrentReleaseID)
-	fmt.Fprintf(d.Out, "previous: %s\n", emptyDash(state.PreviousReleaseID))
-	fmt.Fprintf(d.Out, "status: %s\n", record.Status)
-	fmt.Fprintf(d.Out, "git_sha: %s\n", record.Git.SHA)
-	fmt.Fprintf(d.Out, "dirty: %t\n", record.Git.Dirty)
-	fmt.Fprintln(d.Out, "hosts:")
-	for _, host := range record.Hosts {
-		fmt.Fprintf(d.Out, "  - %s (%s): %s\n", host.ID, host.SSH, host.Status)
-	}
-	return nil
-}
-
 func (d Deployer) Down() error {
 	unlock, err := d.operationLock()
 	if err != nil {
@@ -800,7 +792,7 @@ func (d Deployer) Down() error {
 	return nil
 }
 
-func (d Deployer) Rollback() error {
+func (d Deployer) Rollback() (result error) {
 	unlock, err := d.operationLock()
 	if err != nil {
 		return err
@@ -825,6 +817,12 @@ func (d Deployer) Rollback() error {
 	if err != nil {
 		return err
 	}
+
+	finishAttempt, err := d.trackAttempt(&state, &previous, "rollback")
+	if err != nil {
+		return err
+	}
+	defer finishAttempt(&result)
 
 	recovery, err := recoveryPlan(d.Root, previous)
 	if err != nil {
@@ -860,13 +858,9 @@ func (d Deployer) Rollback() error {
 	if err := SaveRelease(d.Root, previous); err != nil {
 		return err
 	}
-	return SaveState(d.Root, State{
-		ResourceID:        previous.ResourceID,
-		Project:           previous.Project,
-		Environment:       previous.Environment,
-		CurrentReleaseID:  previous.ReleaseID,
-		PreviousReleaseID: current.ReleaseID,
-	})
+	state.CurrentReleaseID = previous.ReleaseID
+	state.PreviousReleaseID = current.ReleaseID
+	return SaveState(d.Root, state)
 }
 
 func recordFromPlan(plan Plan, bundle Bundle, previousReleaseID string) ReleaseRecord {

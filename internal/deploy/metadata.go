@@ -28,6 +28,7 @@ type ReleaseRecord struct {
 	Apply             StepRecord    `json:"apply"`
 	Rollback          StepRecord    `json:"rollback"`
 	Checks            []CheckRecord `json:"checks,omitempty"`
+	RecoveryChecks    []CheckRecord `json:"recovery_checks,omitempty"`
 	Status            string        `json:"status"`
 	CreatedAt         time.Time     `json:"created_at"`
 	UpdatedAt         time.Time     `json:"updated_at"`
@@ -46,6 +47,7 @@ type HostRecord struct {
 	Services  []string       `json:"services"`
 	RemoteDir string         `json:"remote_dir"`
 	Status    string         `json:"status"`
+	ApplyStep string         `json:"apply_step,omitempty"`
 }
 
 type StepRecord struct {
@@ -76,14 +78,21 @@ type CheckRecord struct {
 	DurationMS      int64     `json:"duration_ms"`
 }
 
+type AttemptRecord struct {
+	ReleaseID string     `json:"release_id"`
+	Action    string     `json:"action"`
+	Step      StepRecord `json:"step"`
+}
+
 type State struct {
-	Version           int       `json:"version"`
-	ResourceID        string    `json:"resource_id"`
-	Project           string    `json:"project"`
-	Environment       string    `json:"environment"`
-	CurrentReleaseID  string    `json:"current_release_id,omitempty"`
-	PreviousReleaseID string    `json:"previous_release_id,omitempty"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	LatestAttempt     *AttemptRecord `json:"latest_attempt,omitempty"`
+	Version           int            `json:"version"`
+	ResourceID        string         `json:"resource_id"`
+	Project           string         `json:"project"`
+	Environment       string         `json:"environment"`
+	CurrentReleaseID  string         `json:"current_release_id,omitempty"`
+	PreviousReleaseID string         `json:"previous_release_id,omitempty"`
+	UpdatedAt         time.Time      `json:"updated_at"`
 }
 
 func LoadState(root string, project Project) (State, error) {
@@ -91,6 +100,9 @@ func LoadState(root string, project Project) (State, error) {
 		return State{}, err
 	}
 	if err := migrateState(root, project); err != nil {
+		return State{}, err
+	}
+	if err := protectMetadataPath(root, statePath(root, project)); err != nil {
 		return State{}, err
 	}
 	body, err := os.ReadFile(statePath(root, project))
@@ -114,11 +126,17 @@ func LoadState(root string, project Project) (State, error) {
 }
 
 func SaveState(root string, state State) error {
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return err
+	}
 	if err := upgradeState(&state); err != nil {
 		return err
 	}
 	project := Project{Name: state.Project, Environment: state.Environment}
 	if err := project.validate(); err != nil {
+		return err
+	}
+	if err := protectMetadataPath(root, statePath(root, project)); err != nil {
 		return err
 	}
 	state.UpdatedAt = time.Now().UTC()
@@ -141,6 +159,9 @@ func LoadRelease(root string, project Project, releaseID string) (ReleaseRecord,
 	}
 	if project.resourceID == "" {
 		project.resourceID = state.ResourceID
+	}
+	if err := protectMetadataPath(root, releaseMetadataPath(root, project, releaseID)); err != nil {
+		return ReleaseRecord{}, err
 	}
 	body, err := os.ReadFile(releaseMetadataPath(root, project, releaseID))
 	if err != nil {
@@ -241,6 +262,9 @@ func validateRecordPaths(root string, project Project, releaseID string, record 
 }
 
 func SaveRelease(root string, record ReleaseRecord) error {
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return err
+	}
 	if err := upgradeRelease(&record); err != nil {
 		return err
 	}
@@ -253,6 +277,9 @@ func SaveRelease(root string, record ReleaseRecord) error {
 	}
 	record.UpdatedAt = time.Now().UTC()
 	path := releaseMetadataPath(root, project, record.ReleaseID)
+	if err := protectMetadataPath(root, path); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("create release metadata dir: %w", err)
 	}
@@ -284,4 +311,12 @@ func writeJSON(path string, value any) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+func protectMetadataPath(root, path string) error {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return err
+	}
+	return noSymlinkPath(root, relative)
 }

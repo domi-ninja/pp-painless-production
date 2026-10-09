@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [011 - implement status and deployment records ](011-implement-status-and-deployment-records.md)
 - [019 - reconcile routes and services ](019-reconcile-routes-and-services.md)
 - [020 - complete host permissions ](020-complete-host-permissions.md)
 - [021 - reconcile ssh and firewall ](021-reconcile-ssh-and-firewall.md)
@@ -28,6 +27,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 - [Completed 012](done/012-implement-rollback.md)
 
 - [Completed 018](done/018-define-recovery-and-readiness.md)
+
+- [Completed 011](done/011-implement-status-and-deployment-records.md)
 
 ## Earlier work
 
