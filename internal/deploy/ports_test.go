@@ -32,8 +32,8 @@ func TestPublishedPortsDefaultToLoopback(t *testing.T) {
 func TestAutoPortScriptUsesStableKeyAndRange(t *testing.T) {
 	script := autoPortScript("quotes:web:80")
 	for _, wanted := range []string{
-		"/etc/pp/ports.tsv",
-		"/etc/pp/ports.lock",
+		"base='/etc/pp'",
+		"$base/ports.lock",
 		"quotes:web:80",
 		"seq 18000 19999",
 	} {

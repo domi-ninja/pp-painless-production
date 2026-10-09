@@ -34,8 +34,14 @@ func LoadEnvFile(path string) (map[string]string, error) {
 		}
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
-		if key == "" {
-			return nil, fmt.Errorf("%s:%d has empty key", path, lineNumber)
+		if !envKeyPattern.MatchString(key) {
+			return nil, fmt.Errorf("%s:%d has an invalid env key", path, lineNumber)
+		}
+		if _, exists := values[key]; exists {
+			return nil, fmt.Errorf("%s:%d repeats env key %s", path, lineNumber, key)
+		}
+		if len(value) > 0 && (value[0] == '\'' || value[0] == '"') && (len(value) < 2 || value[len(value)-1] != value[0]) {
+			return nil, fmt.Errorf("%s:%d has an unmatched env quote", path, lineNumber)
 		}
 		values[key] = trimEnvQuotes(value)
 	}
@@ -89,10 +95,22 @@ func encodeEnv(values map[string]string) ([]byte, error) {
 	sort.Strings(keys)
 	var body strings.Builder
 	for _, key := range keys {
-		if strings.ContainsAny(key, "=\r\n") || strings.ContainsAny(values[key], "\r\n") {
+		if !envKeyPattern.MatchString(key) || strings.ContainsAny(values[key], "\r\n") {
 			return nil, fmt.Errorf("unsupported multiline env key or value")
 		}
 		body.WriteString(key + "=" + values[key] + "\n")
+	}
+	return []byte(body.String()), nil
+}
+
+// Saved inputs are read by the pp parser, so protect literal outer quotes and spaces.
+func encodeSourceEnv(values map[string]string) ([]byte, error) {
+	if _, err := encodeEnv(values); err != nil {
+		return nil, err
+	}
+	var body strings.Builder
+	for _, item := range sortedMap(values) {
+		body.WriteString(item.Key + "='" + item.Value + "'\n")
 	}
 	return []byte(body.String()), nil
 }

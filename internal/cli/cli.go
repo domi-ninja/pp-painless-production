@@ -23,6 +23,10 @@ func MainContext(ctx context.Context, name string, args []string, stdout, stderr
 	flags := flag.NewFlagSet(name+" "+command, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", "deploy.yml", "deployment config, relative to the working directory")
+	var releasePorts bool
+	if command == "down" {
+		flags.BoolVar(&releasePorts, "release-ports", false, "retire owned port allocations after stopping containers")
+	}
 	var dryRun bool
 	if command == "cleanup" {
 		flags.BoolVar(&dryRun, "dry-run", false, "preview cleanup without deleting artifacts")
@@ -51,7 +55,7 @@ func MainContext(ctx context.Context, name string, args []string, stdout, stderr
 	case "deploy":
 		return runDeploy(ctx, *configPath, stdout, stderr)
 	case "down":
-		return runDown(ctx, *configPath, stdout, stderr)
+		return runDown(ctx, *configPath, releasePorts, stdout, stderr)
 	case "init":
 		return runInit(ctx, *configPath, stdout, stderr)
 	case "plan":
@@ -70,13 +74,13 @@ func MainContext(ctx context.Context, name string, args []string, stdout, stderr
 	}
 }
 
-func runDown(ctx context.Context, configPath string, stdout io.Writer, stderr io.Writer) int {
+func runDown(ctx context.Context, configPath string, releasePorts bool, stdout io.Writer, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "error: read working directory: %v\n", err)
 		return 1
 	}
-	if err := configuredDeployer(ctx, wd, configPath, stdout, stderr).Down(); err != nil {
+	if err := configuredDeployer(ctx, wd, configPath, stdout, stderr).DownWithPortRelease(releasePorts); err != nil {
 		printError(stderr, err)
 		return 1
 	}

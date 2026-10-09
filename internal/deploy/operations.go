@@ -258,7 +258,15 @@ func (d Deployer) RunMigrationRecord(plan Plan, rollback bool) (StepRecord, erro
 	if migration == nil {
 		return StepRecord{Status: "skipped", At: time.Now().UTC()}, nil
 	}
-	image := RenderTemplate(migration.Image, VarsForPlan(plan))
+	saved, err := savedMigration(d.Root, filepath.Join(plan.Config.Project.localDir(d.Root), "releases", plan.ReleaseID))
+	if err != nil {
+		return StepRecord{}, err
+	}
+	migration = saved
+	if migration == nil {
+		return StepRecord{}, fmt.Errorf("saved migration contract is missing")
+	}
+	image := migration.Image
 	pinned, err := d.pinMigrationImage(plan, image)
 	if err != nil {
 		return StepRecord{Status: "failed", Error: err.Error(), At: time.Now().UTC()}, err
@@ -547,7 +555,8 @@ func (d Deployer) RunHooks(plan Plan, phase string) error {
 			}
 		}
 		ctx, cancel := optionalTimeoutContext(d.Runner.context(), hook.TimeoutSeconds)
-		err := d.Runner.RunEnvContext(ctx, d.Root, env, hook.Run[0], hook.Run[1:]...)
+		args := renderArgs(hook.Run, plan, "", env)
+		err := d.Runner.RunEnvContext(ctx, d.Root, env, args[0], args[1:]...)
 		cancel()
 		if err != nil {
 			return fmt.Errorf("hook %s: %w", hook.Name, err)
@@ -573,6 +582,13 @@ func (d Deployer) RunChecks(plan Plan, group string) ([]CheckRecord, error) {
 }
 
 func (d Deployer) RunCheck(plan Plan, group string, check Check) (CheckRecord, error) {
+	if check.URL != "" {
+		values, err := loadConfigEnv(d.Root, plan.Config.Env)
+		if err != nil {
+			return CheckRecord{}, err
+		}
+		check.URL = RenderValue(check.URL, plan, "", values)
+	}
 	started := time.Now().UTC()
 	record := CheckRecord{
 		Group:     group,
@@ -595,7 +611,7 @@ func (d Deployer) RunCheck(plan Plan, group string, check Check) (CheckRecord, e
 	record.Target = check.Command[0]
 	record.EnvSource = check.Env.Source
 	fmt.Fprintf(d.Out, "check %s: %s\n", check.Name, record.Target)
-	err := d.runCommandCheck(check)
+	err := d.runCommandCheck(plan, check)
 	finishCheckRecord(&record, err)
 	return record, err
 }
@@ -641,7 +657,7 @@ func (d Deployer) runHTTPCheck(check Check, record *CheckRecord) error {
 	return last
 }
 
-func (d Deployer) runCommandCheck(check Check) error {
+func (d Deployer) runCommandCheck(plan Plan, check Check) error {
 	env := map[string]string{}
 	if check.Env.Source != "" {
 		values, err := loadSelectedEnv(d.Root, check.Env)
@@ -652,7 +668,8 @@ func (d Deployer) runCommandCheck(check Check) error {
 	}
 	ctx, cancel := context.WithTimeout(d.Runner.context(), checkTimeout(check.TimeoutSeconds))
 	defer cancel()
-	if err := d.Runner.RunEnvContext(ctx, d.Root, env, check.Command[0], check.Command[1:]...); err != nil {
+	args := renderArgs(check.Command, plan, "", env)
+	if err := d.Runner.RunEnvContext(ctx, d.Root, env, args[0], args[1:]...); err != nil {
 		return fmt.Errorf("check %s: %w", check.Name, err)
 	}
 	return nil
@@ -759,7 +776,8 @@ func (d Deployer) Copy(local string, sshTarget string, remotePath string) error 
 	return d.Runner.Run(d.Root, "scp", local, sshTarget+":"+remotePath)
 }
 
-func (d Deployer) Down() error {
+func (d Deployer) Down() error { return d.DownWithPortRelease(false) }
+func (d Deployer) DownWithPortRelease(releasePorts bool) error {
 	unlock, err := d.operationLock()
 	if err != nil {
 		return err
@@ -786,6 +804,11 @@ func (d Deployer) Down() error {
 			targets[host.SSH] = HostPlan{ID: host.ID, SSH: host.SSH, Services: host.Services}
 		}
 	}
+	if len(targets) == 0 {
+		for id, host := range plan.Config.Hosts {
+			targets[host.SSH] = HostPlan{ID: id, SSH: host.SSH}
+		}
+	}
 	for _, item := range sortedMap(targets) {
 		plan.Hosts = append(plan.Hosts, item.Value)
 	}
@@ -806,6 +829,11 @@ func (d Deployer) Down() error {
 		}
 		if err := d.Runner.SSHScript(d.Root, host.SSH, routeUpdateScript(plan.Config.Project.ResourceID(), "", "/etc/pp/proxy/routes", "/etc/caddy/Caddyfile")); err != nil {
 			return err
+		}
+		if releasePorts {
+			if err := d.Runner.SSHScript(d.Root, host.SSH, releasePortsScript(plan.Config.Project.ResourceID(), "/etc/pp")); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

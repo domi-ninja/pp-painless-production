@@ -381,9 +381,10 @@ func (d Deployer) cleanupPlan() (Plan, error) {
 		return Plan{}, err
 	}
 	var cfg struct {
-		Version   int       `yaml:"version"`
-		Project   Project   `yaml:"project"`
-		Retention Retention `yaml:"retention"`
+		Version   int             `yaml:"version"`
+		Project   Project         `yaml:"project"`
+		Retention Retention       `yaml:"retention"`
+		Hosts     map[string]Host `yaml:"hosts"`
 	}
 	cfg.Version = CurrentConfigVersion
 	if err := yaml.Unmarshal(body, &cfg); err != nil {
@@ -403,5 +404,5 @@ func (d Deployer) cleanupPlan() (Plan, error) {
 		return Plan{}, err
 	}
 	cfg.Project.resourceID = state.ResourceID
-	return Plan{Config: Config{Version: cfg.Version, Project: cfg.Project, Retention: cfg.Retention}}, nil
+	return Plan{Config: Config{Version: cfg.Version, Project: cfg.Project, Retention: cfg.Retention, Hosts: cfg.Hosts}}, nil
 }

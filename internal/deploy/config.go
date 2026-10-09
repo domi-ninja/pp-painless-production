@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -379,7 +380,7 @@ func ValidateConfig(root string, cfg Config) error {
 			problems = append(problems, field+".service references unknown service "+route.Service)
 		}
 		if route.Target != "" {
-			if err := validateCaddyTarget(route.Target); err != nil {
+			if err := validateCaddyTarget(route.Target); err != nil && !inputPlaceholder.MatchString(route.Target) {
 				problems = append(problems, field+".target "+err.Error())
 			}
 		} else {
@@ -446,6 +447,12 @@ func ValidateConfig(root string, cfg Config) error {
 		problems = append(problems, buildImageProblems(Plan{Config: cfg, Git: GitMetadata{SHA: "validation", ShortSHA: "valid"}, ReleaseID: "validation"}, values)...)
 	}
 
+	if len(problems) == 0 {
+		validation := BuildPlan(cfg, GitMetadata{SHA: "validation", ShortSHA: "valid"}, time.Now())
+		if err := validatePlanTemplates(root, validation, true); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
 	if len(problems) > 0 {
 		return ValidationError{Problems: problems}
 	}
@@ -533,7 +540,7 @@ func validateCheck(problems *[]string, root string, field string, check Check) {
 		*problems = append(*problems, field+" must declare exactly one of url or command")
 	}
 	if hasURL {
-		if err := validateRouteTarget(check.URL); err != nil {
+		if err := validateRouteTarget(check.URL); err != nil && !inputPlaceholder.MatchString(check.URL) {
 			*problems = append(*problems, field+".url "+err.Error())
 		}
 	}

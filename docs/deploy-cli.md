@@ -160,3 +160,13 @@ A built service's `image` must match a tag from its selected build. Built images
 Mounts use explicit Compose long syntax. A declared `name` defaults to a named volume; a host `source` defaults to a bind mount. Bind sources must be absolute host paths and must already exist. pp sets `create_host_path: false` so a typo cannot create an empty data directory. Named volumes must appear in the top-level `volumes` map. Set `read_only: true` for either type when needed.
 
 Route templates for a host are combined into one deployment-owned route file. Remove the former `dest_name` field; it never selected the destination.
+
+## Ports, templates and env syntax
+
+Automatic allocation avoids saved allocations, listening sockets, Docker-published ports and every fixed port in the pending host plan. A saved allocation is reused only when it does not conflict with the plan and any live binding has the expected deployment and service owner. Invalid or conflicting port records fail instead of being reassigned.
+
+`pp down` keeps allocations for a future restart. Use `pp down --release-ports` to retire them after stopping the deployment. Ordinary retention does not reclaim ports. A later rollback may need those old ports to be available again.
+
+pp templates apply to image tags, public build args, service command and entrypoint arguments, inline env values, health commands, mount paths and routes. `${service.NAME.port.TARGET}` supports fixed and automatic ports. Hooks, command checks and migration arguments can use metadata and their declared env inputs. Missing `${env.KEY}` or `${service.NAME.port.TARGET}` inputs fail validation. Env values enter replacements once; pp does not interpret dollar expressions inside a value.
+
+Env files use one `KEY=VALUE` per line. Keys contain letters, digits and underscores and cannot start with a digit. Blank lines and lines beginning with `#` are ignored. One matching pair of outer quotes is removed. Other quotes, dollar signs, backslashes and inline `#` characters stay literal. Duplicate keys, `export`, unmatched outer quotes and multiline values fail. Migration commands and selected env values are saved before execution so recovery uses the same inputs.

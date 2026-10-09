@@ -23,6 +23,10 @@ type recoveryContract struct {
 }
 
 func saveRecoveryContract(root string, plan Plan, bundle Bundle) error {
+	publicValues, err := loadConfigEnv(root, plan.Config.Env)
+	if err != nil {
+		return err
+	}
 	contract := recoveryContract{Version: 1, Services: map[string]Service{}, Checks: map[string][]Check{}}
 	for id, svc := range plan.Config.Services {
 		contract.Services[id] = Service{Phase: svc.Phase, Hosts: svc.Hosts}
@@ -38,17 +42,20 @@ func saveRecoveryContract(root string, plan Plan, bundle Bundle) error {
 				contract.HasCommandChecks = true
 				continue
 			}
+			check.URL = RenderValue(check.URL, plan, "", publicValues)
 			contract.Checks[group] = append(contract.Checks[group], check)
 		}
 	}
 	if plan.Config.Migrations != nil {
 		migration := *plan.Config.Migrations
-		migration.Image = RenderTemplate(migration.Image, VarsForPlan(plan))
+		migration.Image = RenderValue(migration.Image, plan, "", publicValues)
 		values, err := loadSelectedEnv(root, migration.Env)
 		if err != nil {
 			return err
 		}
-		body, err := encodeEnv(values)
+		migration.Command = renderArgs(migration.Command, plan, "", values)
+		migration.RollbackCommand = renderArgs(migration.RollbackCommand, plan, "", values)
+		body, err := encodeSourceEnv(values)
 		if err != nil {
 			return err
 		}
@@ -210,4 +217,36 @@ func (d Deployer) recoverRelease(current ReleaseRecord, target *ReleaseRecord, r
 		step.Error = err.Error()
 	}
 	return step, checks, err
+}
+
+func savedMigration(root, bundle string) (*Migration, error) {
+	path := filepath.Join(bundle, "recovery.json")
+	if err := validateRecoveryArtifact(root, bundle, path); err != nil {
+		return nil, err
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var contract recoveryContract
+	if err := json.Unmarshal(body, &contract); err != nil {
+		return nil, err
+	}
+	if contract.Version != 1 {
+		return nil, fmt.Errorf("unsupported recovery contract version %d", contract.Version)
+	}
+	if contract.Migration != nil {
+		if contract.Migration.Env.Source != "migration.env" {
+			return nil, fmt.Errorf("invalid saved migration env path")
+		}
+		relative, err := filepath.Rel(root, filepath.Join(bundle, "migration.env"))
+		if err != nil {
+			return nil, err
+		}
+		if err := noSymlinkPath(root, relative); err != nil {
+			return nil, err
+		}
+		contract.Migration.Env.Source = relative
+	}
+	return contract.Migration, nil
 }

@@ -91,6 +91,9 @@ func RenderBundle(root string, plan Plan) (Bundle, error) {
 	if err != nil {
 		return Bundle{}, err
 	}
+	if err := validatePlanTemplates(root, plan, false); err != nil {
+		return Bundle{}, err
+	}
 	if problems := buildImageProblems(plan, envValues); len(problems) > 0 {
 		return Bundle{}, ValidationError{Problems: problems}
 	}
@@ -253,6 +256,7 @@ func renderCaddyRoutes(root string, hostDir string, plan Plan, hostID string, en
 		if err != nil {
 			return "", err
 		}
+		target = RenderValue(target, plan, hostID, envValues)
 		if err := validateCaddyHost(route.Host); err != nil {
 			return "", fmt.Errorf("route host: %w", err)
 		}
@@ -352,10 +356,10 @@ func renderComposeService(plan Plan, hostID string, serviceID string, service Se
 	out := ComposeService{
 		Image:       RenderValue(service.Image, plan, hostID, envValues),
 		Restart:     "unless-stopped",
-		Command:     service.Command,
-		Entrypoint:  service.Entrypoint,
+		Command:     renderArgs(service.Command, plan, hostID, envValues),
+		Entrypoint:  renderArgs(service.Entrypoint, plan, hostID, envValues),
 		Ports:       renderPorts(plan, hostID, serviceID, service.Ports),
-		Volumes:     renderVolumeMounts(service.Volumes),
+		Volumes:     renderVolumeMounts(renderMounts(service.Volumes, plan, hostID, envValues)),
 		Labels:      labels,
 		Environment: renderEnvironment(plan, hostID, envValues, service.Environment, service.CommandEnv),
 	}
@@ -520,4 +524,13 @@ func writeYAML(path string, value any) error {
 
 func remoteReleaseDir(project Project, releaseID string) string {
 	return project.remoteDir() + "/releases/" + releaseID
+}
+
+func renderMounts(mounts []VolumeMount, plan Plan, host string, values map[string]string) []VolumeMount {
+	out := append([]VolumeMount(nil), mounts...)
+	for i := range out {
+		out[i].Source = RenderValue(out[i].Source, plan, host, values)
+		out[i].Target = RenderValue(out[i].Target, plan, host, values)
+	}
+	return out
 }
