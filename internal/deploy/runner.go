@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 type Runner struct {
@@ -27,7 +28,9 @@ func (r Runner) SSHScript(dir, target, script string) error {
 	if err := validateSSHTarget(target); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(r.context(), "ssh", target, "sh -s")
+	ctx, cancel := context.WithTimeout(r.context(), 10*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ssh", transportArgs("ssh", []string{target, "sh -s"})...)
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Stdout, cmd.Stderr = r.Stdout, r.Stderr
@@ -38,7 +41,9 @@ func (r Runner) SSHScript(dir, target, script string) error {
 }
 
 func (r Runner) Run(dir string, name string, args ...string) error {
-	cmd := exec.CommandContext(r.context(), name, args...)
+	ctx, cancel := r.transportContext(name)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, transportArgs(name, args)...)
 	cmd.Dir = dir
 	cmd.Stdout = r.Stdout
 	cmd.Stderr = r.Stderr
@@ -57,7 +62,7 @@ func (r Runner) RunEnvContext(ctx context.Context, dir string, env map[string]st
 	stop := context.AfterFunc(r.context(), cancel)
 	defer stop()
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, transportArgs(name, args)...)
 	cmd.Dir = dir
 	cmd.Stdout = r.Stdout
 	cmd.Stderr = r.Stderr
@@ -75,7 +80,9 @@ func (r Runner) RunEnvContext(ctx context.Context, dir string, env map[string]st
 }
 
 func (r Runner) Output(dir string, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(r.context(), name, args...)
+	ctx, cancel := r.transportContext(name)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, transportArgs(name, args)...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -89,4 +96,17 @@ func shellQuote(value string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func transportArgs(name string, args []string) []string {
+	if name != "ssh" && name != "scp" {
+		return args
+	}
+	return append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2"}, args...)
+}
+func (r Runner) transportContext(name string) (context.Context, context.CancelFunc) {
+	if name == "ssh" || name == "scp" {
+		return context.WithTimeout(r.context(), 10*time.Minute)
+	}
+	return context.WithCancel(r.context())
 }

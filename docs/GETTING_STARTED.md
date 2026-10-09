@@ -55,7 +55,15 @@ Verify a fresh SSH connection and Docker access:
 ssh deploy@YOUR_SERVER 'docker info >/dev/null && docker compose version'
 ```
 
-The SSH account also needs to write release files under its home directory, manage `/etc/pp/ports.tsv` and `/etc/pp/proxy/routes/`, and reload Caddy. The current CLI does not invoke `sudo` automatically. The playbook creates root-owned proxy directories, so configure and verify these permissions for your deployment account before using `pp`. Passwordless sudo alone does not make those direct commands work.
+The playbook gives the deployment account Docker access and ownership of `/etc/pp`, including the proxy directories. Caddy reads public route files and reloads through its local admin endpoint. pp does not invoke sudo.
+
+For an existing host, create those paths for the deployment account before the first release:
+
+```sh
+sudo install -d -o deploy -g deploy -m 0755 /etc/pp /etc/pp/proxy /etc/pp/proxy/routes
+```
+
+Configure the host Caddyfile to import `/etc/pp/proxy/routes/*.caddy` on its own line. Verify that `deploy` can run `docker info`, `docker compose version`, `caddy adapt --config /etc/caddy/Caddyfile`, and `caddy reload --config /etc/caddy/Caddyfile`. Keep Caddy's admin endpoint local. pp checks tools, writable paths, Compose version and build platform compatibility before building or migrating.
 
 Point your application's DNS records at the host. Caddy handles public HTTPS while container ports stay on `127.0.0.1`.
 

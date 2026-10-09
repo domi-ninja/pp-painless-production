@@ -1,5 +1,6 @@
 ---
-docker_users: []
+docker_users:
+  - "{{ admin_user }}"
 docker_packages:
   - docker-ce
   - docker-ce-cli

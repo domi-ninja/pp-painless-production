@@ -243,6 +243,8 @@ func TestImageRemovalDoesNotDeleteRetaggedImageOrForce(t *testing.T) {
 	writeExecutable(t, root, "docker", `#!/bin/sh
 printf '%s\n' "$*" >> "$PP_TEST_LOG"
 case "$*" in
+ 'info --format {{.OSType}}/{{.Architecture}}') echo linux/amd64; exit 0 ;;
+ 'buildx prune --help') echo '--max-used-space --reserved-space --min-free-space'; exit 0 ;;
  *'{{.Id}}'*) printf 'sha256:%064d\n' 2 ;;
  *'{{json .RepoTags}}'*) echo '["other:tag"]' ;;
  *'image rm'*) exit 99 ;;
@@ -267,6 +269,8 @@ func TestAutomaticRetentionAfterSuccessfulAndFailedDeploys(t *testing.T) {
 	for _, name := range []string{"docker", "ssh", "scp"} {
 		writeExecutable(t, root, name, `#!/bin/sh
 case "$*" in
+ 'info --format {{.OSType}}/{{.Architecture}}') echo linux/amd64; exit 0 ;;
+ 'buildx prune --help') echo '--max-used-space --reserved-space --min-free-space'; exit 0 ;;
  *pp-lock-ready*) printf 'pp-lock-ready\n'; cat >/dev/null; exit 0 ;;
  'buildx inspect '*--bootstrap) exit 0 ;;
  'buildx inspect '*) exit 1 ;;

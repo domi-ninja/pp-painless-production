@@ -46,6 +46,44 @@
     create_home: true
     state: present
 
+- name: Inspect deployment metadata paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /etc/pp
+    - /etc/pp/ports.tsv
+    - /etc/pp/ports.lock
+  register: pp_metadata_paths
+
+- name: Refuse symlinks in deployment metadata paths
+  ansible.builtin.assert:
+    that:
+      - not (item.stat.islnk | default(false))
+    fail_msg: "Replace symlinked pp metadata paths before provisioning."
+  loop: "{{ pp_metadata_paths.results }}"
+
+- name: Create deployment metadata directory
+  ansible.builtin.file:
+    path: /etc/pp
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0755"
+
+- name: Make port allocation files writable by the deployment account
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0600"
+  loop:
+    - /etc/pp/ports.tsv
+    - /etc/pp/ports.lock
+
 - name: Create admin SSH directory
   ansible.builtin.file:
     path: "/home/{{ admin_user }}/.ssh"

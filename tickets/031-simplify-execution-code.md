@@ -11,6 +11,8 @@ Address audit findings 33 with generic pp behavior and reusable examples.
 - Deduplicate image manifest entries.
 - Align the Go module with the public repository name.
 
+- Remove owned migration containers after timeout and report cleanup errors.
+
 ## Acceptance
 
 The listed behavior has focused checks and matching user documentation. Existing deployment identity, data paths and rollback artifacts remain usable.

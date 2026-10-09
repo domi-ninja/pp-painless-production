@@ -245,6 +245,9 @@ func TestRollbackRejectsOtherEnvironmentBeforeRunningCommands(t *testing.T) {
 
 func writeExecutable(t *testing.T, root, name, body string) {
 	t.Helper()
+	if name == "ssh" || name == "scp" {
+		body = strings.Replace(body, "#!/bin/sh\n", "#!/bin/sh\nwhile [ \"${1:-}\" = -o ]; do shift 2; done\n", 1)
+	}
 	if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}

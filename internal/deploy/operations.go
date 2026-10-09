@@ -59,6 +59,9 @@ func (d Deployer) Deploy() (result error) {
 			return err
 		}
 	}
+	if err := d.preflight(plan); err != nil {
+		return err
+	}
 	if err := d.checkLegacyHosts(plan); err != nil {
 		return err
 	}
