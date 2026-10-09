@@ -4,7 +4,6 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 ## Open
 
-- [029 - remove unrelated operations ](029-remove-unrelated-operations.md)
 - [030 - consolidate docs and ci ](030-consolidate-docs-and-ci.md)
 - [031 - simplify execution code ](031-simplify-execution-code.md)
 
@@ -40,6 +39,8 @@ Work through this list in order. Completed tickets move to `done/`, with one imp
 
 - [Completed 028](done/028-make-examples-maintainable.md)
 
+- [Completed 029](done/029-remove-unrelated-operations.md)
+
 ## Earlier work
 
-Completed tickets are in [done/](done/). Abandoned designs are in [dropped/](dropped/). Ticket 013 is historical application-specific work and will be relocated during ticket 029.
+Completed tickets are in [done/](done/). Abandoned designs are in [dropped/](dropped/).

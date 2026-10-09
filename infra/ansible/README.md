@@ -35,11 +35,7 @@ After verifying a fresh `deploy` login, update `ansible_user` in the inventory f
 - `reverse_proxy_enabled`: enable host-level Caddy for public HTTPS routes.
 - `data_volume_enabled` and `docker_data_root_enabled`: disabled by default. Verify devices and back up existing data before changing storage.
 
-The retained Coolify role is for legacy hosts. Leave it disabled for new pp setups.
-
-## Existing Git-host configuration
-
-Forgejo, Forgejo runner, Woodpecker and runner-isolation roles moved to the sibling `git-host-ansible` repository. Shared baseline roles were copied so both repos work independently. Existing ignored inventory and credential files were left untouched; they were not pushed to either repository. Move the relevant host settings into the new repo before using its playbooks, and never provision an existing server with placeholder secrets.
+Coolify provisioning is unsupported. Its old enable and proxy-stop flags fail before provisioning. Migrate existing edge services explicitly before giving Caddy ports 80/443.
 
 ## SSH keys and firewall changes
 

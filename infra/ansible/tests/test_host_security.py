@@ -12,7 +12,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 class ApplicationHostTests(unittest.TestCase):
     def test_refuses_git_host_and_ci_flags(self):
         task = yaml.safe_load((ROOT / "playbooks/prod-server.yml").read_text())[0]["pre_tasks"][0]
-        for flag in [None, "forgejo_enabled", "forgejo_runner_enabled", "woodpecker_agent_enabled"]:
+        for flag in [None, "forgejo_enabled", "forgejo_runner_enabled", "woodpecker_agent_enabled", "coolify_enabled", "reverse_proxy_stop_coolify_proxy"]:
             with self.subTest(flag=flag), tempfile.TemporaryDirectory(prefix="pp-host-guard-") as temp:
                 play = [{"hosts": "all", "gather_facts": False, "vars": {flag: True} if flag else {}, "tasks": [task]}]
                 path = pathlib.Path(temp) / "test.yml"

@@ -1,6 +1,7 @@
 infra/ansible/inventory/*.local.yml
 infra/ansible/group_vars/*.local.yml
-infra/ansible/host_vars/p3.yml
+infra/ansible/host_vars/*.yml
+!infra/ansible/host_vars/prod.example.yml
 infra/ansible/host_vars/*.local.yml
 infra/ansible/host_vars/*.credentials.local.yml
 infra/ansible/group_vars/*.vault.yml

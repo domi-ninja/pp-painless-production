@@ -45,15 +45,6 @@
     mode: "0644"
   notify: Reload caddy
 
-- name: Stop Coolify Traefik proxy when pp owns edge ports
-  ansible.builtin.command: docker stop coolify-proxy
-  register: reverse_proxy_stop_coolify_proxy_result
-  changed_when: "'coolify-proxy' in reverse_proxy_stop_coolify_proxy_result.stdout"
-  failed_when:
-    - reverse_proxy_stop_coolify_proxy_result.rc != 0
-    - "'No such container' not in reverse_proxy_stop_coolify_proxy_result.stderr"
-  when: reverse_proxy_stop_coolify_proxy | bool
-
 - name: Enable and start Caddy
   ansible.builtin.systemd:
     name: caddy

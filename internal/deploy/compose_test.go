@@ -131,13 +131,13 @@ func TestRenderBundleUsesAllocatedAutoPortForComposeAndRoute(t *testing.T) {
 func TestRenderBundleSupportsConvexStyleExtensions(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "Dockerfile", "FROM scratch\n")
-	writeFile(t, root, ".env.local", "VITE_SITE_URL=https://humanist.design\nVITE_CONVEX_URL=https://api.humanist.design\n")
+	writeFile(t, root, ".env.local", "VITE_SITE_URL=https://convex.example.com\nVITE_CONVEX_URL=https://api.convex.example.com\n")
 	writeFile(t, root, ".env.backend", "POSTGRES_URL=postgres://humanist:secret@postgres:5432/humanist\n")
-	writeFile(t, root, "humanist.caddy.tmpl", "api.humanist.design {\n\treverse_proxy 127.0.0.1:${service.convex-backend.port.3210}\n}\n")
+	writeFile(t, root, "convex.caddy.tmpl", "api.convex.example.com {\n\treverse_proxy 127.0.0.1:${service.convex-backend.port.3210}\n}\n")
 	cfg := Config{
 		Version: 1,
 		Project: Project{
-			Name:        "humanist-design",
+			Name:        "convex-site",
 			Environment: "prod",
 		},
 		Env: EnvSpec{Source: ".env.local"},
@@ -145,23 +145,23 @@ func TestRenderBundleSupportsConvexStyleExtensions(t *testing.T) {
 			"web": {
 				Context:    ".",
 				Dockerfile: "Dockerfile",
-				Tags:       []string{"humanist-design-web:${release}"},
+				Tags:       []string{"convex-site-web:${release}"},
 				Args: map[string]string{
 					"VITE_SITE_URL": "${env.VITE_SITE_URL}",
 				},
 			},
 		},
 		Hosts: map[string]Host{
-			"p3": {SSH: "deploy@p3.domi.ninja"},
+			"p3": {SSH: "deploy@app.example.com"},
 		},
 		Services: map[string]Service{
 			"web": {
-				Image:  "humanist-design-web:${release}",
+				Image:  "convex-site-web:${release}",
 				Build:  "web",
 				Phase:  "frontend",
 				Hosts:  []string{"p3"},
 				Ports:  []Port{{Published: AutoPort(), Target: 80}},
-				Health: Health{HTTP: "https://humanist.design/"},
+				Health: Health{HTTP: "https://convex.example.com/"},
 			},
 			"convex-backend": {
 				Image:  "ghcr.io/get-convex/convex-backend:latest",
@@ -179,12 +179,12 @@ func TestRenderBundleSupportsConvexStyleExtensions(t *testing.T) {
 				Hosts:       []string{"p3"},
 				Command:     []string{"server", "/data"},
 				Environment: map[string]string{"MINIO_BROWSER_REDIRECT_URL": "${env.VITE_SITE_URL}"},
-				Volumes:     []VolumeMount{{Source: "/data/pp/humanist-design/s3", Target: "/data", Type: "bind"}},
+				Volumes:     []VolumeMount{{Source: "/data/pp/convex-site/s3", Target: "/data", Type: "bind"}},
 				Health:      Health{Command: []string{"curl", "-sf", "http://127.0.0.1:9000/minio/health/ready"}},
 			},
 		},
 		RouteFiles: []RouteFile{{
-			Source: "humanist.caddy.tmpl",
+			Source: "convex.caddy.tmpl",
 			Host:   "p3",
 		}},
 		Hooks: map[string][]Hook{
@@ -210,7 +210,7 @@ func TestRenderBundleSupportsConvexStyleExtensions(t *testing.T) {
 	if len(bundle.Images) != 1 {
 		t.Fatalf("expected one local image, got %d", len(bundle.Images))
 	}
-	if bundle.Images[0].ID != "web" || bundle.Images[0].Tags[0] != "humanist-design-web:20260628T100000Z-abcdef1" {
+	if bundle.Images[0].ID != "web" || bundle.Images[0].Tags[0] != "convex-site-web:20260628T100000Z-abcdef1" {
 		t.Fatalf("unexpected image bundle: %#v", bundle.Images[0])
 	}
 	host := bundle.Hosts[0]
@@ -223,11 +223,11 @@ func TestRenderBundleSupportsConvexStyleExtensions(t *testing.T) {
 	}
 	composeText := string(compose)
 	for _, wanted := range []string{
-		"image: humanist-design-web:20260628T100000Z-abcdef1",
+		"image: convex-site-web:20260628T100000Z-abcdef1",
 		"- 127.0.0.1:18001:80",
 		"- 127.0.0.1:18002:3210",
-		"source: /data/pp/humanist-design/s3",
-		"MINIO_BROWSER_REDIRECT_URL: https://humanist.design",
+		"source: /data/pp/convex-site/s3",
+		"MINIO_BROWSER_REDIRECT_URL: https://convex.example.com",
 	} {
 		if !strings.Contains(composeText, wanted) {
 			t.Fatalf("compose missing %q:\n%s", wanted, composeText)
@@ -349,11 +349,11 @@ func TestRunChecksSupportsCommandChecksWithEnv(t *testing.T) {
 }
 
 func TestDownProjectContainersCommandUsesProjectAndEnvironmentLabels(t *testing.T) {
-	command := downProjectContainersCommand(Project{Name: "humanist-design", Environment: "dev"})
+	command := downProjectContainersCommand(Project{Name: "convex-site", Environment: "dev"})
 	for _, wanted := range []string{
-		"docker ps -aq --filter 'label=pp.project=humanist-design'",
+		"docker ps -aq --filter 'label=pp.project=convex-site'",
 		"docker rm -f $ids",
-		"no containers for deployment humanist-design_dev",
+		"no containers for deployment convex-site_dev",
 		"--filter 'label=pp.environment=dev'",
 	} {
 		if !strings.Contains(command, wanted) {

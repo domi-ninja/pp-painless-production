@@ -3,13 +3,15 @@
   hosts: prod_servers
   become: true
   pre_tasks:
-    - name: Refuse Git hosting and CI roles in the application playbook
+    - name: Refuse unsupported platform roles in the application playbook
       ansible.builtin.assert:
         that:
+          - not (coolify_enabled | default(false) | bool)
+          - not (reverse_proxy_stop_coolify_proxy | default(false) | bool)
           - not (forgejo_enabled | default(false) | bool)
           - not (forgejo_runner_enabled | default(false) | bool)
           - not (woodpecker_agent_enabled | default(false) | bool)
-        fail_msg: "Git hosting and CI moved to git-host-ansible. Use its playbooks; CI still requires a dedicated VM."
+        fail_msg: "This playbook supports pp application hosts. Remove legacy Coolify flags; use separate playbooks for Git hosting and CI."
 
     - name: Load ignored host credentials when present
       ansible.builtin.include_vars:
@@ -23,7 +25,5 @@
       when: data_volume_enabled | bool
     - role: docker
       when: docker_enabled | bool
-    - role: coolify
-      when: coolify_enabled | bool
     - role: reverse_proxy
       when: reverse_proxy_enabled | bool

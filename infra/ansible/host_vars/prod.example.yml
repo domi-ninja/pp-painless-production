@@ -30,8 +30,6 @@ data_volume_enabled: false
 docker_data_root_enabled: false
 # docker_data_root_path: /data/docker
 
-# Legacy Coolify support is off for new pp application hosts.
-coolify_enabled: false
 
 # Git hosting and CI are configured in the separate git-host-ansible repo.
 
