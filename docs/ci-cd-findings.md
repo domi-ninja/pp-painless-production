@@ -68,7 +68,7 @@ Forgejo's quick start uses `.forgejo/workflows/demo.yaml` and `runs-on: docker`;
 
 ### Docker Compose shape
 
-Forgejo's runner install docs show an OCI-image setup using a `docker-in-docker` service plus a `data` volume for runner state. Run registration in a one-off container before starting the daemon. Source: https://forgejo.org/docs/v11.0/admin/actions/runner-installation/
+The Runner 4.0.0 layout comes from the legacy [Forgejo v11.0 guide](https://forgejo.org/docs/v11.0/admin/actions/runner-installation/). The commands below adapt its registration step to a [one-off Compose container](https://docs.docker.com/reference/cli/docker/compose/run/), which uses the service's volumes and overrides its daemon command. Finish registration before starting the daemon.
 
 Skeleton:
 
