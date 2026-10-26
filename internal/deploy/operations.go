@@ -921,6 +921,10 @@ func planForRecord(base Plan, record ReleaseRecord) Plan {
 	base.Config.Project.resourceID = record.ResourceID
 	base.ReleaseID = record.ReleaseID
 	base.Git = record.Git
+	// These commands and checks belong to the current checkout, not the old release.
+	// Container health checks still run while applying the recorded bundle.
+	base.Config.Hooks = nil
+	base.Config.Checks = nil
 	return base
 }
 
