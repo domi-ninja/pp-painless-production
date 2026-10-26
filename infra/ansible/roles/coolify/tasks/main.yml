@@ -241,11 +241,12 @@
 - name: Read Coolify application bind port
   ansible.builtin.command:
     argv:
-      - awk
+      - docker
+      - inspect
+      - --format
       - >-
-        /^APP_PORT=/ { port=substr($0, index($0, "=")+1) }
-        END { gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", port); print port ? port : "8000" }
-      - "{{ coolify_source_dir }}/.env"
+        {% raw %}{{ (index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort }}{% endraw %}
+      - coolify
   register: coolify_runtime_port
   changed_when: false
   failed_when: >-
