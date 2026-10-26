@@ -294,16 +294,20 @@
       - docker
       - exec
       - -e
-      - "COOLIFY_ADMIN_NAME={{ coolify_admin_name }}"
+      - COOLIFY_ADMIN_NAME
       - -e
-      - "COOLIFY_ADMIN_EMAIL={{ coolify_admin_email }}"
+      - COOLIFY_ADMIN_EMAIL
       - -e
-      - "COOLIFY_ADMIN_PASSWORD={{ coolify_admin_password }}"
+      - COOLIFY_ADMIN_PASSWORD
       - coolify
       - php
       - artisan
       - tinker
       - --execute=app(\App\Actions\Fortify\CreateNewUser::class)->create(['name' => getenv('COOLIFY_ADMIN_NAME'), 'email' => getenv('COOLIFY_ADMIN_EMAIL'), 'password' => getenv('COOLIFY_ADMIN_PASSWORD'), 'password_confirmation' => getenv('COOLIFY_ADMIN_PASSWORD')]);
+  environment:
+    COOLIFY_ADMIN_NAME: "{{ coolify_admin_name }}"
+    COOLIFY_ADMIN_EMAIL: "{{ coolify_admin_email }}"
+    COOLIFY_ADMIN_PASSWORD: "{{ coolify_admin_password }}"
   when:
     - coolify_admin_create_enabled | bool
     - coolify_user_count.stdout | int == 0
@@ -315,12 +319,14 @@
       - docker
       - exec
       - -e
-      - "COOLIFY_ADMIN_EMAIL={{ coolify_admin_email }}"
+      - COOLIFY_ADMIN_EMAIL
       - coolify
       - php
       - artisan
       - tinker
       - --execute=echo \App\Models\User::where('email', getenv('COOLIFY_ADMIN_EMAIL'))->count();
+  environment:
+    COOLIFY_ADMIN_EMAIL: "{{ coolify_admin_email }}"
   register: coolify_admin_count
   changed_when: false
   failed_when: coolify_admin_count.stdout | int != 1
