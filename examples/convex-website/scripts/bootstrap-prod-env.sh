@@ -52,15 +52,21 @@ API_HOST="api.$SITE_HOST"
 DEFAULT_DB_NAME="${PROJECT//-/_}"
 
 get_existing_nonsecret() {
-  local key="$1"
-  local fallback="$2"
-  local value=""
-
-  if [[ -f "$ENV_FILE" ]]; then
-    value="$(sed -n "s/^${key}=//p" "$ENV_FILE" | tail -n 1)"
-  fi
-
-  printf '%s' "${value:-$fallback}"
+  node - "$ENV_FILE" "$1" "$2" <<'NODE'
+const fs = require('node:fs');
+const [file, key, fallback] = process.argv.slice(2);
+let value = '';
+if (fs.existsSync(file)) {
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const separator = line.indexOf('=');
+    if (separator < 0 || line.slice(0, separator).trim() !== key) continue;
+    value = line.slice(separator + 1).trim();
+    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))) value = value.slice(1, -1);
+  }
+}
+process.stdout.write(value || fallback);
+NODE
 }
 
 # Preserve names that point at existing data. Fresh copies without an env file
@@ -82,6 +88,7 @@ trap 'rm -f "$TEMP_FILE"' EXIT
 
 INSTANCE_SECRET="$(openssl rand -hex 32)"
 POSTGRES_PASSWORD="$(openssl rand -hex 32)"
+POSTGRES_URL_USER="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' -- "$POSTGRES_USER")"
 MINIO_ROOT_USER="$(openssl rand -hex 12)"
 MINIO_ROOT_PASSWORD="$(openssl rand -hex 32)"
 
@@ -94,7 +101,7 @@ MINIO_ROOT_PASSWORD="$(openssl rand -hex 32)"
   printf 'POSTGRES_DB=%s\n' "$POSTGRES_DB"
   printf 'POSTGRES_USER=%s\n' "$POSTGRES_USER"
   printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
-  printf 'POSTGRES_URL=postgres://%s:%s@postgres:5432?sslmode=disable\n' "$POSTGRES_USER" "$POSTGRES_PASSWORD"
+  printf 'POSTGRES_URL=postgres://%s:%s@postgres:5432?sslmode=disable\n' "$POSTGRES_URL_USER" "$POSTGRES_PASSWORD"
   printf 'MINIO_ROOT_USER=%s\n' "$MINIO_ROOT_USER"
   printf 'MINIO_ROOT_PASSWORD=%s\n' "$MINIO_ROOT_PASSWORD"
   printf 'S3_STORAGE_EXPORTS_BUCKET=%s\n' "$S3_STORAGE_EXPORTS_BUCKET"
