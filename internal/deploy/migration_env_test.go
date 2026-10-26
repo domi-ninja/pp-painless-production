@@ -18,7 +18,7 @@ while [ "$#" -gt 0 ]; do
  if [ "$1" = --env-file ]; then
   shift
   printf '%s' "$1" > "$PP_TEST_ENV_PATH"
-  stat -c '%a' "$1" > "$PP_TEST_ENV_MODE"
+  find "$1" -prune -perm 0600 -print > "$PP_TEST_ENV_MODE"
   cat "$1" > "$PP_TEST_ENV_CONTENT"
  fi
  shift
@@ -40,10 +40,10 @@ done
 			if got := string(mustRead(t, filepath.Join(root, "content"))); got != want {
 				t.Fatalf("env=%q, want=%q", got, want)
 			}
-			if got := strings.TrimSpace(string(mustRead(t, filepath.Join(root, "mode")))); got != "600" {
-				t.Fatalf("mode=%s", got)
-			}
 			envPath := string(mustRead(t, filepath.Join(root, "path")))
+			if got := strings.TrimSpace(string(mustRead(t, filepath.Join(root, "mode")))); got != envPath {
+				t.Fatal("migration environment is not mode 0600")
+			}
 			if _, err := os.Stat(envPath); !os.IsNotExist(err) {
 				t.Fatalf("temporary env not removed: %v", err)
 			}
