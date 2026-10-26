@@ -237,7 +237,13 @@ Forgejo-specific Woodpecker settings are documented here: https://woodpecker-ci.
 
 ### Docker Compose shape
 
-Registration is closed. Set `WOODPECKER_ADMIN` to the intended administrator account; that administrator can admit additional users. Users may activate only repositories where they have administrator rights on the forge.
+Registration stays closed. Set `WOODPECKER_ADMIN` to the intended Forgejo administrator login; that account can sign in even with `WOODPECKER_OPEN=false`. To admit another Forgejo account, configure the [Woodpecker CLI](https://woodpecker-ci.org/docs/cli) for this server with the administrator's API token, then run:
+
+```sh
+woodpecker-cli admin user add FORGEJO_LOGIN
+```
+
+`WOODPECKER_ADMIN` does not enable general registration. Users may activate only repositories where they have administrator rights on the forge.
 
 Adapted from Woodpecker's Docker Compose docs and Forgejo driver docs:
 
