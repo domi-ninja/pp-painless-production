@@ -12,9 +12,19 @@ func TestRunnerOutputSeparatesDiagnostics(t *testing.T) {
 	if err != nil || out != "managed" {
 		t.Fatalf("output=%q err=%v", out, err)
 	}
-	_, err = (Runner{}).Output(t.TempDir(), "sh", "-c", "printf 'failure detail' >&2; exit 7")
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 || !strings.Contains(err.Error(), "failure detail") {
-		t.Fatalf("lost command diagnostic or exit status: %v", err)
+	for _, test := range []struct {
+		name, command, diagnostic string
+	}{
+		{"stderr", "printf 'failure detail' >&2; exit 7", "failure detail"},
+		{"stdout", "printf 'partial result'; exit 7", "partial result"},
+		{"both", "printf 'failure detail' >&2; printf 'partial result'; exit 7", "failure detail\npartial result"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := (Runner{}).Output(t.TempDir(), "sh", "-c", test.command)
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 || !strings.HasSuffix(err.Error(), "\n"+test.diagnostic) {
+				t.Fatalf("lost command diagnostic or exit status: %v", err)
+			}
+		})
 	}
 }

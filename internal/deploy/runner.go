@@ -81,7 +81,7 @@ func (r Runner) Output(dir string, name string, args ...string) (string, error) 
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()+string(out)))
+		return "", fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()+"\n"+string(out)))
 	}
 	return strings.TrimSpace(string(out)), nil
 }
