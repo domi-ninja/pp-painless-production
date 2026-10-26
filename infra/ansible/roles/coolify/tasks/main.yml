@@ -238,9 +238,25 @@
       - --force-recreate
   changed_when: true
 
+- name: Read Coolify application bind port
+  ansible.builtin.command:
+    argv:
+      - awk
+      - >-
+        /^APP_PORT=/ { port=substr($0, index($0, "=")+1) }
+        END { gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", port); print port ? port : "8000" }
+      - "{{ coolify_source_dir }}/.env"
+  register: coolify_runtime_port
+  changed_when: false
+  failed_when: >-
+    coolify_runtime_port.rc != 0 or
+    coolify_runtime_port.stdout is not match('^[0-9]+$') or
+    coolify_runtime_port.stdout | int < 1 or
+    coolify_runtime_port.stdout | int > 65535
+
 - name: Wait for Coolify HTTP endpoint
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ coolify_app_port }}"
+    url: "http://127.0.0.1:{{ coolify_runtime_port.stdout }}"
     follow_redirects: none
     status_code:
       - 200
