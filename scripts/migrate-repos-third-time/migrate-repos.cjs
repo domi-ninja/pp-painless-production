@@ -11,8 +11,6 @@ const FORGEJO_HOST = 'git.domi.ninja';
 const FORGEJO_OWNER = 'domi-ninja';
 const FORGEJO_SSH_PORT = '2222';
 const FORGEJO_API_BASE = `https://${FORGEJO_HOST}/api/v1`;
-const FORGEJO_ROOT_SSH = `root@${FORGEJO_HOST}`;
-const FORGEJO_CONTAINER = 'forgejo';
 const rawGitDirs = new Set();
 let forgejoToken = '';
 
@@ -52,40 +50,12 @@ function spawnGit(repoPath, args) {
   }
 }
 
-function generateForgejoToken() {
+function getForgejoToken() {
   if (forgejoToken) return forgejoToken;
-
-  forgejoToken = execFileSync(
-    'ssh',
-    [
-      FORGEJO_ROOT_SSH,
-      'docker',
-      'exec',
-      '--user',
-      '1000:1000',
-      FORGEJO_CONTAINER,
-      'forgejo',
-      'admin',
-      'user',
-      'generate-access-token',
-      '--username',
-      FORGEJO_OWNER,
-      '--token-name',
-      `migrate-repos-third-time-${Date.now()}`,
-      '--raw',
-      '--scopes',
-      'all',
-    ],
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  ).trim();
-
+  forgejoToken = (process.env.FORGEJO_TOKEN || '').trim();
   if (!forgejoToken) {
-    throw new Error('Forgejo token generation returned an empty token');
+    throw new Error('Set FORGEJO_TOKEN to an operator-managed migration token; this script does not create access tokens.');
   }
-
   return forgejoToken;
 }
 
@@ -236,7 +206,7 @@ async function requestJson(method, endpoint, body) {
     method,
     headers: {
       Accept: 'application/json',
-      Authorization: `token ${generateForgejoToken()}`,
+      Authorization: `token ${getForgejoToken()}`,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -376,7 +346,12 @@ async function main() {
   if (failed > 0) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { getForgejoToken };
+
