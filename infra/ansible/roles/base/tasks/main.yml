@@ -10,7 +10,8 @@
   ansible.builtin.assert:
     that:
       - admin_ssh_public_keys | length > 0
-    fail_msg: "Set admin_ssh_public_keys before disabling SSH password authentication."
+      - admin_ssh_public_keys | select('search', 'REPLACE_WITH') | list | length == 0
+    fail_msg: "Set real admin_ssh_public_keys without REPLACE_WITH placeholders before disabling SSH password authentication."
   when: not ssh_password_authentication | bool
 
 - name: Update apt cache
