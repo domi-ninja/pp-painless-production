@@ -283,7 +283,21 @@ func (d Deployer) runMigration(migration *Migration, image string, rollback bool
 
 	args := []string{"run", "--rm", "--pull", "never"}
 	if migration.Env.Source != "" {
-		args = append(args, "--env-file", filepath.Join(d.Root, migration.Env.Source))
+		dir, err := os.MkdirTemp("", "pp-migration-env-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(dir)
+		spec := migration.Env
+		// Migrations historically receive the full source unless keys are declared.
+		if len(spec.Required) == 0 {
+			spec.IncludeAll = true
+		}
+		envFile, err := renderServiceEnv(d.Root, dir, "migration", spec)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--env-file", envFile)
 	}
 	args = append(args, image)
 	args = append(args, command...)
