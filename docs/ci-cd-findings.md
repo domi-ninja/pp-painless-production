@@ -229,6 +229,8 @@ Forgejo-specific Woodpecker settings are documented here: https://woodpecker-ci.
 
 ### Docker Compose shape
 
+Registration is closed. Set `WOODPECKER_ADMIN` to the intended administrator account; that administrator can admit additional users. Users may activate only repositories where they have administrator rights on the forge.
+
 Adapted from Woodpecker's Docker Compose docs and Forgejo driver docs:
 
 ```yaml
@@ -242,7 +244,8 @@ services:
     volumes:
       - woodpecker-server-data:/var/lib/woodpecker/
     environment:
-      - WOODPECKER_OPEN=true
+      - WOODPECKER_OPEN=false
+      - WOODPECKER_ADMIN=${WOODPECKER_ADMIN}
       - WOODPECKER_HOST=${WOODPECKER_HOST}
       - WOODPECKER_FORGEJO=true
       - WOODPECKER_FORGEJO_URL=https://codeberg.org
