@@ -326,7 +326,7 @@ async function migrateRepo(repoPath) {
 
 function planRepo(repoPath) {
   const relative = path.relative(REPOS_DIR, repoPath);
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || !isGitRepo(repoPath)) {
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative) || !isGitRepo(repoPath)) {
     throw new Error(`Not a repository inside ${REPOS_DIR}: ${repoPath}`);
   }
   const upstreamUrl = tryGit(repoPath, ['remote', 'get-url', REMOTE_NAME]);

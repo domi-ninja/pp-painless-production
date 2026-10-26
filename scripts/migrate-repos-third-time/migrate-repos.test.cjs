@@ -79,3 +79,11 @@ test('keeps existing Forgejo destinations on the skip path', async () => {
   assert.equal(await api.migrateRepo('/root/repos/app'), 'skipped');
   assert.ok(!commands.some(command => command[0] === 'push'));
 });
+
+
+test('allows dot-prefixed repository names without allowing parent traversal', () => {
+  const {api} = migrationFixture(true);
+  assert.equal(api.planRepo('/root/repos/..legacy').repoPath, '/root/repos/..legacy');
+  assert.throws(() => api.planRepo('/root/repos/../escape'), /Not a repository inside/);
+  assert.throws(() => api.planRepo('/root/repos/..'), /Not a repository inside/);
+});
