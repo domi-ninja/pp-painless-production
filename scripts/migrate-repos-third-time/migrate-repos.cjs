@@ -277,21 +277,24 @@ function verifyDestination(repo, repoName) {
 }
 
 async function ensureForgejoRepo(repoName) {
-  if (!(await forgejoRepoExists(repoName))) {
+  const created = !(await forgejoRepoExists(repoName));
+  if (created) {
     console.log(`    creating private Forgejo repo: ${FORGEJO_OWNER}/${repoName}`);
     await createForgejoRepo(repoName);
   }
   const repo = await requestJson('GET', `/repos/${encodeURIComponent(FORGEJO_OWNER)}/${encodeURIComponent(repoName)}`);
   verifyDestination(repo, repoName);
+  return created;
 }
 
 async function migrateRepo(repoPath) {
   const upstreamUrl = tryGit(repoPath, ['remote', 'get-url', REMOTE_NAME]);
   if (upstreamUrl && isForgejoSshUpstream(upstreamUrl)) {
     console.log(`  skip: ${REMOTE_NAME} already points to Forgejo SSH (${upstreamUrl})`);
-    await ensureForgejoRepo(deriveRepoName(repoPath, upstreamUrl));
+    const created = await ensureForgejoRepo(deriveRepoName(repoPath, upstreamUrl));
+    if (created) spawnGit(repoPath, ['push', REMOTE_NAME, '--all']);
     setForgejoBranchUpstreams(repoPath);
-    return 'skipped';
+    return created ? 'migrated' : 'skipped';
   }
 
   const repoName = deriveRepoName(repoPath, upstreamUrl);
@@ -375,4 +378,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { getForgejoToken, verifyDestination, validatePlan, main };
+module.exports = { getForgejoToken, verifyDestination, validatePlan, migrateRepo, planRepo, main };
