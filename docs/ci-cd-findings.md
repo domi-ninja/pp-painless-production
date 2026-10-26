@@ -68,7 +68,7 @@ Forgejo's quick start uses `.forgejo/workflows/demo.yaml` and `runs-on: docker`;
 
 ### Docker Compose shape
 
-Forgejo's runner install docs show an OCI-image setup using a `docker-in-docker` service plus a `data` volume for runner state. The initial command keeps the runner container alive for registration; after registration, replace it with `forgejo-runner daemon`. Source: https://forgejo.org/docs/v11.0/admin/actions/runner-installation/
+Forgejo's runner install docs show an OCI-image setup using a `docker-in-docker` service plus a `data` volume for runner state. Run registration in a one-off container before starting the daemon. Source: https://forgejo.org/docs/v11.0/admin/actions/runner-installation/
 
 Skeleton:
 
@@ -90,15 +90,14 @@ services:
     volumes:
       - ./data:/data
     restart: unless-stopped
-    command: '/bin/sh -c "sleep 5; forgejo-runner daemon"'
+    command: forgejo-runner daemon
 ```
 
 Registration is interactive:
 
 ```sh
+docker compose run --rm runner forgejo-runner register
 docker compose up -d
-docker exec -it runner /bin/sh
-forgejo-runner register
 ```
 
 When prompted, use `https://codeberg.org/`, paste the runner token, name the runner, and set labels.
