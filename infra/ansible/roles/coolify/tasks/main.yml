@@ -240,7 +240,7 @@
 
 - name: Wait for Coolify HTTP endpoint
   ansible.builtin.uri:
-    url: http://127.0.0.1:8000
+    url: "http://127.0.0.1:{{ coolify_app_port }}"
     follow_redirects: none
     status_code:
       - 200
