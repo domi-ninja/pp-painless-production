@@ -78,12 +78,18 @@ services:
     image: docker:dind
     privileged: true
     command: ["dockerd", "-H", "tcp://0.0.0.0:2375", "--tls=false"]
+    healthcheck:
+      test: ["CMD", "docker", "--host", "tcp://127.0.0.1:2375", "info"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
     restart: unless-stopped
 
   runner:
     image: data.forgejo.org/forgejo/runner:4.0.0
     depends_on:
-      - docker-in-docker
+      docker-in-docker:
+        condition: service_healthy
     environment:
       DOCKER_HOST: tcp://docker-in-docker:2375
     user: 1001:1001
