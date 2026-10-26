@@ -42,7 +42,7 @@
       - rsync
       - -aHAX
       - --numeric-ids
-      - /var/lib/docker/
+      - "{{ docker_current_root.stdout }}/"
       - "{{ docker_data_root_path }}/"
   when: docker_current_root.stdout != docker_data_root_path
 
