@@ -289,8 +289,13 @@ async function migrateRepo(repoPath) {
   const upstreamUrl = tryGit(repoPath, ['remote', 'get-url', REMOTE_NAME]);
   if (upstreamUrl && isForgejoSshUpstream(upstreamUrl)) {
     console.log(`  sync: ${REMOTE_NAME} already points to Forgejo SSH (${upstreamUrl})`);
-    await ensureForgejoRepo(deriveRepoName(repoPath, upstreamUrl));
-    spawnGit(repoPath, ['push', REMOTE_NAME, '--all']);
+    const repoName = deriveRepoName(repoPath, upstreamUrl);
+    const verifiedUrl = forgejoSshUrl(repoName);
+    await ensureForgejoRepo(repoName);
+    if (upstreamUrl !== verifiedUrl) {
+      spawnGit(repoPath, ['remote', 'set-url', REMOTE_NAME, verifiedUrl]);
+    }
+    spawnGit(repoPath, ['push', verifiedUrl, '--all']);
     setForgejoBranchUpstreams(repoPath);
     return 'migrated';
   }

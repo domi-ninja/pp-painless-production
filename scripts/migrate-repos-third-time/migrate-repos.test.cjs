@@ -71,7 +71,7 @@ function migrationFixture(destinationExists, failPush = false, upstreamUrl = 'ss
 test('repopulates a recreated destination before setting branch upstreams', async () => {
   const {api, commands} = migrationFixture(false);
   assert.equal(await api.migrateRepo('/root/repos/app'), 'migrated');
-  const push = commands.findIndex(command => command.join(' ') === 'push upstream --all');
+  const push = commands.findIndex(command => command[0] === 'push');
   const fetch = commands.findIndex(command => command[0] === 'fetch');
   assert.ok(push >= 0 && fetch > push);
 });
@@ -79,7 +79,7 @@ test('repopulates a recreated destination before setting branch upstreams', asyn
 test('pushes before setting upstreams when retrying an existing destination', async () => {
   const {api, commands} = migrationFixture(true);
   assert.equal(await api.migrateRepo('/root/repos/app'), 'migrated');
-  const push = commands.findIndex(command => command.join(' ') === 'push upstream --all');
+  const push = commands.findIndex(command => command[0] === 'push');
   const fetch = commands.findIndex(command => command[0] === 'fetch');
   assert.ok(push >= 0 && fetch > push);
 });
@@ -104,4 +104,24 @@ test('rejects destinations differing only by case before any mutation', () => {
   const entries = [api.planRepo('/root/repos/App'), api.planRepo('/root/repos/app')];
   assert.throws(() => api.validatePlan(entries), /Duplicate destination/);
   assert.deepEqual(commands, []);
+});
+
+
+test('canonicalizes existing Forgejo upstreams and pushes to the verified URL', async () => {
+  const verifiedUrl = 'ssh://git@git.domi.ninja:2222/domi-ninja/app.git';
+  for (const upstream of [
+    'ssh://git@git.domi.ninja/domi-ninja/app.git',
+    'git@git.domi.ninja:domi-ninja/app.git',
+    'ssh://git@git.domi.ninja:2222/domi-ninja/extra/app.git',
+    'ssh://git@git.domi.ninja:2222/domi-ninja/app!.git',
+  ]) {
+    const {api, commands} = migrationFixture(true, false, upstream);
+    await api.migrateRepo('/root/repos/app');
+    const setUrl = commands.findIndex(command => command.join(' ') === `remote set-url upstream ${verifiedUrl}`);
+    const push = commands.findIndex(command => command[0] === 'push');
+    const fetch = commands.findIndex(command => command[0] === 'fetch');
+    assert.ok(setUrl >= 0 && push > setUrl && fetch > push, upstream);
+    // A direct URL also avoids a pre-existing remote.pushurl overriding the reviewed destination.
+    assert.deepEqual(Array.from(commands[push]), ['push', verifiedUrl, '--all']);
+  }
 });
