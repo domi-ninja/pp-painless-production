@@ -99,9 +99,11 @@ services:
     command: forgejo-runner daemon
 ```
 
-Registration is interactive:
+Prepare the bind directory for the runner's `1001:1001` user, then register interactively:
 
 ```sh
+mkdir -p data/.cache
+sudo chown -R 1001:1001 data
 docker compose run --rm runner forgejo-runner register
 docker compose up -d
 ```
