@@ -30,7 +30,7 @@ test('rejects a public or mismatched destination', () => {
 });
 
 
-function migrationFixture(destinationExists) {
+function migrationFixture(destinationExists, failPush = false) {
   const fs = require('node:fs');
   const vm = require('node:vm');
   const commands = [];
@@ -46,7 +46,9 @@ function migrationFixture(destinationExists) {
     },
     spawnSync(name, args) {
       assert.equal(name, 'git');
-      commands.push(args.slice(args.indexOf('-C') + 2));
+      const command = args.slice(args.indexOf('-C') + 2);
+      commands.push(command);
+      if (failPush && command[0] === 'push') return {status: 1, stdout: '', stderr: 'push rejected'};
       return {status: 0, stdout: '', stderr: ''};
     },
   };
@@ -74,10 +76,18 @@ test('repopulates a recreated destination before setting branch upstreams', asyn
   assert.ok(push >= 0 && fetch > push);
 });
 
-test('keeps existing Forgejo destinations on the skip path', async () => {
+test('pushes before setting upstreams when retrying an existing destination', async () => {
   const {api, commands} = migrationFixture(true);
-  assert.equal(await api.migrateRepo('/root/repos/app'), 'skipped');
-  assert.ok(!commands.some(command => command[0] === 'push'));
+  assert.equal(await api.migrateRepo('/root/repos/app'), 'migrated');
+  const push = commands.findIndex(command => command.join(' ') === 'push upstream --all');
+  const fetch = commands.findIndex(command => command[0] === 'fetch');
+  assert.ok(push >= 0 && fetch > push);
+});
+
+test('does not set branch upstreams after a rejected non-forced push', async () => {
+  const {api, commands} = migrationFixture(true, true);
+  await assert.rejects(api.migrateRepo('/root/repos/app'), /push rejected/);
+  assert.ok(!commands.some(command => command[0] === 'fetch' || command[0] === 'branch'));
 });
 
 
