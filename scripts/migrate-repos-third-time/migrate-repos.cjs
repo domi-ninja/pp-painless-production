@@ -343,8 +343,9 @@ function validatePlan(entries) {
     if (!entry || typeof entry.repoPath !== 'string' || JSON.stringify(planRepo(entry.repoPath)) !== JSON.stringify(entry)) {
       throw new Error('Repository state or destination changed; generate and review a new plan');
     }
-    if (destinations.has(entry.destination)) throw new Error(`Duplicate destination: ${entry.destination}`);
-    destinations.add(entry.destination);
+    const destination = entry.destination.toLowerCase();
+    if (destinations.has(destination)) throw new Error(`Duplicate destination: ${entry.destination}`);
+    destinations.add(destination);
   }
 }
 

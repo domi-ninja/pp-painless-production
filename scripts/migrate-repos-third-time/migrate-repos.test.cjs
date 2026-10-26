@@ -30,7 +30,7 @@ test('rejects a public or mismatched destination', () => {
 });
 
 
-function migrationFixture(destinationExists, failPush = false) {
+function migrationFixture(destinationExists, failPush = false, upstreamUrl = 'ssh://git@git.domi.ninja:2222/domi-ninja/app.git') {
   const fs = require('node:fs');
   const vm = require('node:vm');
   const commands = [];
@@ -39,7 +39,7 @@ function migrationFixture(destinationExists, failPush = false) {
     execFileSync(name, args) {
       assert.equal(name, 'git');
       const command = args.slice(args.indexOf('-C') + 2);
-      if (command.join(' ') === 'remote get-url upstream') return 'ssh://git@git.domi.ninja:2222/domi-ninja/app.git';
+      if (command.join(' ') === 'remote get-url upstream') return upstreamUrl;
       if (command[0] === 'rev-parse') return 'true';
       if (command[0] === 'for-each-ref') return command[1].includes('objectname') ? 'refs/heads/main:abc' : 'main';
       throw new Error(`Unexpected git read: ${command}`);
@@ -96,4 +96,12 @@ test('allows dot-prefixed repository names without allowing parent traversal', (
   assert.equal(api.planRepo('/root/repos/..legacy').repoPath, '/root/repos/..legacy');
   assert.throws(() => api.planRepo('/root/repos/../escape'), /Not a repository inside/);
   assert.throws(() => api.planRepo('/root/repos/..'), /Not a repository inside/);
+});
+
+
+test('rejects destinations differing only by case before any mutation', () => {
+  const {api, commands} = migrationFixture(true, false, '');
+  const entries = [api.planRepo('/root/repos/App'), api.planRepo('/root/repos/app')];
+  assert.throws(() => api.validatePlan(entries), /Duplicate destination/);
+  assert.deepEqual(commands, []);
 });
