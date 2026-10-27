@@ -15,7 +15,8 @@ class DockerDataRootTests(unittest.TestCase):
         first_mutation = next(i for i, task in enumerate(tasks)
                               if task["name"] == "Ensure Docker data root directory exists")
         guard = [task for task in tasks[:first_mutation]
-                 if task["name"] not in ["Check Docker CLI is available", "Read current Docker data root"]]
+                 if task["name"] not in ["Check Docker CLI is available", "Read current Docker data root",
+                                         "Reject ambiguous mount layouts before moving Docker data"]]
         with tempfile.TemporaryDirectory(prefix="pp-docker-root-") as temp:
             root = pathlib.Path(temp)
             source = root / "docker"
