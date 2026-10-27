@@ -27,6 +27,14 @@ type imageManifest struct {
 	Images  []ManagedImage `json:"images"`
 }
 
+// Saved bundles can use Compose forms beyond the current renderer's types.
+// Image discovery only needs service image references.
+type composeImageReferences struct {
+	Services map[string]struct {
+		Image string `yaml:"image"`
+	} `yaml:"services"`
+}
+
 var imageIDPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
 func readImageManifest(path string) (imageManifest, error) {
@@ -82,7 +90,7 @@ func imagesForHost(host HostBundle, images []ImageBundle) ([]ImageBundle, error)
 	if err != nil {
 		return nil, err
 	}
-	var compose ComposeFile
+	var compose composeImageReferences
 	if err := yaml.Unmarshal(body, &compose); err != nil {
 		return nil, err
 	}
@@ -221,7 +229,7 @@ func (d Deployer) prepareSourceImages(plan Plan, host HostBundle) error {
 	if err != nil {
 		return err
 	}
-	var compose ComposeFile
+	var compose composeImageReferences
 	if err := yaml.Unmarshal(body, &compose); err != nil {
 		return err
 	}
