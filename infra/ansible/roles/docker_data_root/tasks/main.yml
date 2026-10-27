@@ -15,9 +15,37 @@
   register: docker_current_root
   changed_when: false
 
+- name: Resolve Docker data root paths
+  ansible.builtin.command:
+    argv:
+      - realpath
+      - -m
+      - --
+      - "{{ docker_current_root.stdout }}"
+      - "{{ docker_data_root_path }}"
+  register: docker_resolved_roots
+  changed_when: false
+
+- name: Record canonical Docker data root paths
+  ansible.builtin.set_fact:
+    docker_data_root_source: "{{ docker_resolved_roots.stdout_lines[0] }}"
+    docker_data_root_target: "{{ docker_resolved_roots.stdout_lines[1] }}"
+
+- name: Reject overlapping Docker data roots
+  ansible.builtin.assert:
+    that:
+      - docker_resolved_roots.stdout_lines | length == 2
+      - docker_data_root_source != '/'
+      - docker_data_root_target != '/'
+      - >-
+        docker_data_root_source == docker_data_root_target or
+        (not docker_data_root_source.startswith(docker_data_root_target + '/') and
+         not docker_data_root_target.startswith(docker_data_root_source + '/'))
+    fail_msg: "Docker data roots must be non-root paths that are identical or do not contain one another."
+
 - name: Ensure Docker data root directory exists
   ansible.builtin.file:
-    path: "{{ docker_data_root_path }}"
+    path: "{{ docker_data_root_target }}"
     state: directory
     owner: root
     group: root
@@ -27,14 +55,14 @@
   ansible.builtin.systemd:
     name: docker
     state: stopped
-  when: docker_current_root.stdout != docker_data_root_path
+  when: docker_data_root_source != docker_data_root_target
 
 - name: Stop Docker socket before moving data root
   ansible.builtin.systemd:
     name: docker.socket
     state: stopped
   failed_when: false
-  when: docker_current_root.stdout != docker_data_root_path
+  when: docker_data_root_source != docker_data_root_target
 
 - name: Copy existing Docker state into new data root
   ansible.builtin.command:
@@ -42,14 +70,14 @@
       - rsync
       - -aHAX
       - --numeric-ids
-      - "{{ docker_current_root.stdout }}/"
-      - "{{ docker_data_root_path }}/"
-  when: docker_current_root.stdout != docker_data_root_path
+      - "{{ docker_data_root_source }}/"
+      - "{{ docker_data_root_target }}/"
+  when: docker_data_root_source != docker_data_root_target
 
 - name: Install Docker daemon config with data-root
   ansible.builtin.copy:
     dest: /etc/docker/daemon.json
-    content: "{{ docker_data_root_config | combine({'data-root': docker_data_root_path}) | to_nice_json }}\n"
+    content: "{{ docker_data_root_config | combine({'data-root': docker_data_root_target}) | to_nice_json }}\n"
     owner: root
     group: root
     mode: "0644"
@@ -68,4 +96,4 @@
   ansible.builtin.command: docker info --format {% raw %}'{{.DockerRootDir}}'{% endraw %}
   register: docker_verified_root
   changed_when: false
-  failed_when: docker_verified_root.stdout != docker_data_root_path
+  failed_when: docker_verified_root.stdout != docker_data_root_target
