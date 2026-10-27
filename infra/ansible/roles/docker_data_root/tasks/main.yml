@@ -43,6 +43,40 @@
          not docker_data_root_target.startswith(docker_data_root_source + '/'))
     fail_msg: "Docker data roots must be non-root paths that are identical or do not contain one another."
 
+- name: Reject ambiguous mount layouts before moving Docker data
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import os
+        import subprocess
+        import sys
+
+        def mounts(*options):
+            output = subprocess.check_output(
+                ["findmnt", "--json", "--output", "TARGET,FSROOT,MAJ:MIN", *options],
+                text=True,
+            )
+            return json.loads(output)["filesystems"]
+
+        all_mounts = mounts("--list")
+        for path in sys.argv[1:]:
+            while not os.path.exists(path):
+                path = os.path.dirname(path)
+            mount = mounts("--target", path)[0]
+            root_aliases = sum(
+                entry["maj:min"] == mount["maj:min"] and entry["fsroot"] == "/"
+                for entry in all_mounts
+            )
+            if mount["fsroot"] != "/" or root_aliases > 1:
+                sys.exit("Docker data-root moves require direct, unaliased filesystem mounts; bind mounts and subvolume aliases are unsupported.")
+      - "{{ docker_data_root_source }}"
+      - "{{ docker_data_root_target }}"
+  changed_when: false
+  when: docker_data_root_source != docker_data_root_target
+
 - name: Ensure Docker data root directory exists
   ansible.builtin.file:
     path: "{{ docker_data_root_target }}"
