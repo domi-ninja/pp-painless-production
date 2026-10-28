@@ -68,7 +68,7 @@ Forgejo's quick start uses `.forgejo/workflows/demo.yaml` and `runs-on: docker`;
 
 ### Docker Compose shape
 
-Forgejo's runner install docs show an OCI-image setup using a `docker-in-docker` service plus a `data` volume for runner state. The initial command keeps the runner container alive for registration; after registration, replace it with `forgejo-runner daemon`. Source: https://forgejo.org/docs/v11.0/admin/actions/runner-installation/
+The Runner 4.0.0 layout comes from the legacy [Forgejo v11.0 guide](https://forgejo.org/docs/v11.0/admin/actions/runner-installation/). The commands below adapt its registration step to a [one-off Compose container](https://docs.docker.com/reference/cli/docker/compose/run/), which uses the service's volumes and overrides its daemon command. Finish registration before starting the daemon.
 
 Skeleton:
 
@@ -78,27 +78,34 @@ services:
     image: docker:dind
     privileged: true
     command: ["dockerd", "-H", "tcp://0.0.0.0:2375", "--tls=false"]
+    healthcheck:
+      test: ["CMD", "docker", "--host", "tcp://127.0.0.1:2375", "info"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
     restart: unless-stopped
 
   runner:
     image: data.forgejo.org/forgejo/runner:4.0.0
     depends_on:
-      - docker-in-docker
+      docker-in-docker:
+        condition: service_healthy
     environment:
       DOCKER_HOST: tcp://docker-in-docker:2375
     user: 1001:1001
     volumes:
       - ./data:/data
     restart: unless-stopped
-    command: '/bin/sh -c "sleep 5; forgejo-runner daemon"'
+    command: forgejo-runner daemon
 ```
 
-Registration is interactive:
+Prepare the bind directory for the runner's `1001:1001` user, then register interactively:
 
 ```sh
+mkdir -p data/.cache
+sudo chown -R 1001:1001 data
+docker compose run --rm runner forgejo-runner register
 docker compose up -d
-docker exec -it runner /bin/sh
-forgejo-runner register
 ```
 
 When prompted, use `https://codeberg.org/`, paste the runner token, name the runner, and set labels.
@@ -230,6 +237,14 @@ Forgejo-specific Woodpecker settings are documented here: https://woodpecker-ci.
 
 ### Docker Compose shape
 
+Registration stays closed. Set `WOODPECKER_ADMIN` to the intended Forgejo administrator login; that account can sign in even with `WOODPECKER_OPEN=false`. To admit another Forgejo account, configure the [Woodpecker CLI](https://woodpecker-ci.org/docs/cli) for this server with the administrator's API token, then run:
+
+```sh
+woodpecker-cli admin user add FORGEJO_LOGIN
+```
+
+`WOODPECKER_ADMIN` does not enable general registration. Users may activate only repositories where they have administrator rights on the forge.
+
 Adapted from Woodpecker's Docker Compose docs and Forgejo driver docs:
 
 ```yaml
@@ -243,7 +258,8 @@ services:
     volumes:
       - woodpecker-server-data:/var/lib/woodpecker/
     environment:
-      - WOODPECKER_OPEN=true
+      - WOODPECKER_OPEN=false
+      - WOODPECKER_ADMIN=${WOODPECKER_ADMIN}
       - WOODPECKER_HOST=${WOODPECKER_HOST}
       - WOODPECKER_FORGEJO=true
       - WOODPECKER_FORGEJO_URL=https://codeberg.org

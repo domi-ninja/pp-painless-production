@@ -35,6 +35,8 @@ After verifying a fresh `deploy` login, update `ansible_user` in the inventory f
 - `reverse_proxy_enabled`: enable host-level Caddy for public HTTPS routes.
 - `data_volume_enabled` and `docker_data_root_enabled`: disabled by default. Verify devices and back up existing data before changing storage.
 
+Docker data-root moves require direct, unaliased filesystem mounts. The role rejects nested roots, bind mounts and subvolume aliases before stopping Docker or copying data.
+
 The retained Coolify role is for legacy hosts. Leave it disabled for new pp setups.
 
 ## Existing Git-host configuration

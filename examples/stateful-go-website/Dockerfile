@@ -17,7 +17,9 @@ RUN npx tailwindcss@3.x.x \
 	-o ./frontend/assets/style.css \
 	--minify
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags production -o /out/app ./cmd/server
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -tags production -o /out/app ./cmd/server
 RUN go install github.com/pressly/goose/v3/cmd/goose@v3.26.0
 
 FROM debian:bookworm-slim AS runtime

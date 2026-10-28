@@ -5,6 +5,7 @@ set -euo pipefail
 ENV_FILE="${ENV_FILE:-.env.local}"
 SSH_TARGET="${PP_HOST:-$(awk '$1 == "ssh:" { print $2; exit }' deploy.yml)}"
 PROJECT="${PP_PROJECT:-}"
+ENVIRONMENT="${PP_ENVIRONMENT:-}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Error: $ENV_FILE file not found" >&2
@@ -31,6 +32,23 @@ if [[ -z "$PROJECT" ]]; then
   exit 1
 fi
 
+if [[ -z "$ENVIRONMENT" ]]; then
+  ENVIRONMENT="$(awk '
+    /^project:/ { in_project=1; next }
+    in_project && /^[^[:space:]]/ { in_project=0 }
+    in_project && $1 == "environment:" {
+      value=$2
+      gsub(/^["'\'']|["'\'']$/, "", value)
+      print value
+      exit
+    }
+  ' deploy.yml)"
+fi
+if [[ ! "$ENVIRONMENT" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+  echo "Error: set PP_ENVIRONMENT or a literal project.environment in deploy.yml" >&2
+  exit 1
+fi
+
 bucket_keys=(
   S3_STORAGE_EXPORTS_BUCKET
   S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
@@ -51,8 +69,9 @@ done
 
 remote_script='set -euo pipefail
 project="$1"
-shift
-s3_container="$(docker ps --filter "label=pp.project=$project" --filter "label=pp.service=s3" --format "{{.Names}}" | head -n 1)"
+environment="$2"
+shift 2
+s3_container="$(docker ps --filter "label=pp.project=$project" --filter "label=pp.environment=$environment" --filter "label=pp.service=s3" --format "{{.Names}}" | head -n 1)"
 if [ -z "$s3_container" ]; then
   echo "Error: no running s3 container found for pp.project=$project" >&2
   exit 1
@@ -75,7 +94,7 @@ docker run --rm -i --network "$network" --entrypoint /bin/sh minio/mc:latest -eu
   done
 '\'' sh "$@"'
 
-remote_args=("$PROJECT" "${buckets[@]}")
+remote_args=("$PROJECT" "$ENVIRONMENT" "${buckets[@]}")
 escaped_args=()
 for value in "${remote_args[@]}"; do
   escaped_args+=("$(printf '%q' "$value")")

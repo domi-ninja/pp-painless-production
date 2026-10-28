@@ -283,7 +283,21 @@ func (d Deployer) runMigration(migration *Migration, image string, rollback bool
 
 	args := []string{"run", "--rm", "--pull", "never"}
 	if migration.Env.Source != "" {
-		args = append(args, "--env-file", filepath.Join(d.Root, migration.Env.Source))
+		dir, err := os.MkdirTemp("", "pp-migration-env-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(dir)
+		spec := migration.Env
+		// Migrations historically receive the full source unless keys are declared.
+		if len(spec.Required) == 0 {
+			spec.IncludeAll = true
+		}
+		envFile, err := renderServiceEnv(d.Root, dir, "migration", spec)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--env-file", envFile)
 	}
 	args = append(args, image)
 	args = append(args, command...)
@@ -907,6 +921,10 @@ func planForRecord(base Plan, record ReleaseRecord) Plan {
 	base.Config.Project.resourceID = record.ResourceID
 	base.ReleaseID = record.ReleaseID
 	base.Git = record.Git
+	// These commands and checks belong to the current checkout, not the old release.
+	// Container health checks still run while applying the recorded bundle.
+	base.Config.Hooks = nil
+	base.Config.Checks = nil
 	return base
 }
 

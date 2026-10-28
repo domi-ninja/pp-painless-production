@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -57,7 +58,7 @@ func gitOutput(root string, args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return strings.TrimSpace(string(out)), nil
 }

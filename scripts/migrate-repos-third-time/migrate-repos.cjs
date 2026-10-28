@@ -11,8 +11,6 @@ const FORGEJO_HOST = 'git.domi.ninja';
 const FORGEJO_OWNER = 'domi-ninja';
 const FORGEJO_SSH_PORT = '2222';
 const FORGEJO_API_BASE = `https://${FORGEJO_HOST}/api/v1`;
-const FORGEJO_ROOT_SSH = `root@${FORGEJO_HOST}`;
-const FORGEJO_CONTAINER = 'forgejo';
 const rawGitDirs = new Set();
 let forgejoToken = '';
 
@@ -52,40 +50,12 @@ function spawnGit(repoPath, args) {
   }
 }
 
-function generateForgejoToken() {
+function getForgejoToken() {
   if (forgejoToken) return forgejoToken;
-
-  forgejoToken = execFileSync(
-    'ssh',
-    [
-      FORGEJO_ROOT_SSH,
-      'docker',
-      'exec',
-      '--user',
-      '1000:1000',
-      FORGEJO_CONTAINER,
-      'forgejo',
-      'admin',
-      'user',
-      'generate-access-token',
-      '--username',
-      FORGEJO_OWNER,
-      '--token-name',
-      `migrate-repos-third-time-${Date.now()}`,
-      '--raw',
-      '--scopes',
-      'all',
-    ],
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  ).trim();
-
+  forgejoToken = (process.env.FORGEJO_TOKEN || '').trim();
   if (!forgejoToken) {
-    throw new Error('Forgejo token generation returned an empty token');
+    throw new Error('Set FORGEJO_TOKEN to an operator-managed migration token; this script does not create access tokens.');
   }
-
   return forgejoToken;
 }
 
@@ -155,6 +125,7 @@ function isForgejoSshUpstream(remoteUrl) {
   const parsed = parseGitRemoteUrl(remoteUrl);
   if (parsed.host !== FORGEJO_HOST) return false;
   if (!parsed.sshLike) return false;
+  if (parsed.pathname.split('/').filter(Boolean)[0] !== FORGEJO_OWNER) return false;
   if (parsed.user && parsed.user !== 'git') return false;
   if (parsed.port && parsed.port !== FORGEJO_SSH_PORT) return false;
   return true;
@@ -236,7 +207,7 @@ async function requestJson(method, endpoint, body) {
     method,
     headers: {
       Accept: 'application/json',
-      Authorization: `token ${generateForgejoToken()}`,
+      Authorization: `token ${getForgejoToken()}`,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -299,22 +270,34 @@ async function createForgejoRepo(repoName) {
   await requestJson('POST', endpoint, body);
 }
 
-async function ensureForgejoRepo(repoName) {
-  if (await forgejoRepoExists(repoName)) {
-    console.log(`    Forgejo repo exists: ${FORGEJO_OWNER}/${repoName}`);
-    return;
+function verifyDestination(repo, repoName) {
+  if (!repo || repo.full_name !== `${FORGEJO_OWNER}/${repoName}` || repo.private !== true) {
+    throw new Error(`Refusing unverified or public destination ${FORGEJO_OWNER}/${repoName}`);
   }
+}
 
-  console.log(`    creating private Forgejo repo: ${FORGEJO_OWNER}/${repoName}`);
-  await createForgejoRepo(repoName);
+async function ensureForgejoRepo(repoName) {
+  if (!(await forgejoRepoExists(repoName))) {
+    console.log(`    creating private Forgejo repo: ${FORGEJO_OWNER}/${repoName}`);
+    await createForgejoRepo(repoName);
+  }
+  const repo = await requestJson('GET', `/repos/${encodeURIComponent(FORGEJO_OWNER)}/${encodeURIComponent(repoName)}`);
+  verifyDestination(repo, repoName);
 }
 
 async function migrateRepo(repoPath) {
   const upstreamUrl = tryGit(repoPath, ['remote', 'get-url', REMOTE_NAME]);
   if (upstreamUrl && isForgejoSshUpstream(upstreamUrl)) {
-    console.log(`  skip: ${REMOTE_NAME} already points to Forgejo SSH (${upstreamUrl})`);
+    console.log(`  sync: ${REMOTE_NAME} already points to Forgejo SSH (${upstreamUrl})`);
+    const repoName = deriveRepoName(repoPath, upstreamUrl);
+    const verifiedUrl = forgejoSshUrl(repoName);
+    await ensureForgejoRepo(repoName);
+    if (upstreamUrl !== verifiedUrl) {
+      spawnGit(repoPath, ['remote', 'set-url', REMOTE_NAME, verifiedUrl]);
+    }
+    spawnGit(repoPath, ['push', verifiedUrl, '--all']);
     setForgejoBranchUpstreams(repoPath);
-    return 'skipped';
+    return 'migrated';
   }
 
   const repoName = deriveRepoName(repoPath, upstreamUrl);
@@ -344,39 +327,59 @@ async function migrateRepo(repoPath) {
   return 'migrated';
 }
 
-async function main() {
-  if (!fs.existsSync(REPOS_DIR)) {
-    throw new Error(`Repos directory does not exist: ${REPOS_DIR}`);
+function planRepo(repoPath) {
+  const relative = path.relative(REPOS_DIR, repoPath);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative) || !isGitRepo(repoPath)) {
+    throw new Error(`Not a repository inside ${REPOS_DIR}: ${repoPath}`);
   }
-
-  console.log(`Repos: ${REPOS_DIR}`);
-  console.log(`Forgejo: ${FORGEJO_HOST} owner=${FORGEJO_OWNER} ssh_port=${FORGEJO_SSH_PORT}`);
-  console.log('');
-
-  let migrated = 0;
-  let skipped = 0;
-  let failed = 0;
-
-  for (const repoPath of listRepoDirs()) {
-    console.log(path.relative(REPOS_DIR, repoPath));
-
-    try {
-      const result = await migrateRepo(repoPath);
-      if (result === 'skipped') skipped += 1;
-      else migrated += 1;
-    } catch (error) {
-      failed += 1;
-      console.error(`  failed: ${error.message}`);
-    }
-
-    console.log('');
-  }
-
-  console.log(`Done. migrated=${migrated} skipped=${skipped} failed=${failed}`);
-  if (failed > 0) process.exitCode = 1;
+  const upstreamUrl = tryGit(repoPath, ['remote', 'get-url', REMOTE_NAME]);
+  const repoName = deriveRepoName(repoPath, upstreamUrl);
+  if (!repoName) throw new Error(`Could not derive repo name for ${repoPath}`);
+  return {
+    repoPath, upstreamUrl, repoName, destination: forgejoSshUrl(repoName),
+    heads: runGit(repoPath, ['for-each-ref', '--format=%(refname):%(objectname)', 'refs/heads']),
+  };
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+function validatePlan(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) throw new Error('Migration plan must contain repositories');
+  const destinations = new Set();
+  for (const entry of entries) {
+    if (!entry || typeof entry.repoPath !== 'string' || JSON.stringify(planRepo(entry.repoPath)) !== JSON.stringify(entry)) {
+      throw new Error('Repository state or destination changed; generate and review a new plan');
+    }
+    const destination = entry.destination.toLowerCase();
+    if (destinations.has(destination)) throw new Error(`Duplicate destination: ${entry.destination}`);
+    destinations.add(destination);
+  }
+}
+
+async function main(args = process.argv.slice(2)) {
+  if (args.length !== 2 || !['--plan', '--apply'].includes(args[0])) {
+    throw new Error('Usage: migrate-repos.cjs --plan <file> | --apply <reviewed-plan-file>');
+  }
+  if (args[0] === '--plan') {
+    const entries = listRepoDirs().map(planRepo);
+    fs.writeFileSync(args[1], JSON.stringify(entries, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+    console.log(`Review every source, destination, and branch in ${args[1]} before applying. No repositories were changed.`);
+    return;
+  }
+  const entries = JSON.parse(fs.readFileSync(args[1], 'utf8'));
+  // Validate every mapping before any remote mutation or credential use.
+  validatePlan(entries);
+  getForgejoToken();
+  for (const entry of entries) {
+    validatePlan([entry]);
+    console.log(path.relative(REPOS_DIR, entry.repoPath));
+    await migrateRepo(entry.repoPath);
+  }
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { getForgejoToken, verifyDestination, validatePlan, migrateRepo, planRepo, main };
