@@ -6,6 +6,7 @@ target=${1:-/data/containerd}
 [[ $EUID == 0 ]] || { echo 'Run as root' >&2; exit 1; }
 [[ $target == /data/containerd ]] || { echo 'Expected /data/containerd' >&2; exit 1; }
 mountpoint -q /data || { echo '/data must be mounted' >&2; exit 1; }
+[[ $(realpath -m "$target") == "$target" ]] || { echo 'Destination must not use symlinks' >&2; exit 1; }
 exec 9>/run/pp-containerd-migration.lock
 flock -n 9 || { echo 'Migration already running' >&2; exit 1; }
 deployment_user=${2:-deploy}
@@ -29,7 +30,7 @@ if [[ -e /etc/systemd/system/containerd.service.d/pp-data.conf ]]; then cp -a /e
 printf 'Pre-copying containerd store to %s\n' "$target"
 rsync -aHAXx --numeric-ids --exclude /tmpmounts/ --exclude /io.containerd.runtime.v2.task/ "$source/" "$target/"
 rollback() {
- trap - ERR
+ trap - ERR INT TERM
  echo 'Migration failed; restoring original configuration and store' >&2
  systemctl stop docker.socket docker.service containerd.service || true
  cp -a "$backup/config.toml" /etc/containerd/config.toml
@@ -40,7 +41,7 @@ rollback() {
  echo "Original store retained at $source; inspect $target before retrying" >&2
  exit 1
 }
-trap rollback ERR
+trap rollback ERR INT TERM
 printf 'Stopping running containers for final copy\n'
 xargs -r docker stop --time 60 <"$backup/running-containers"
 systemctl stop docker.socket docker.service containerd.service
@@ -71,7 +72,7 @@ if findmnt -rn -o TARGET | awk -v p="$source" '$0==p || index($0,p"/")==1 {found
  echo 'Old source still has mounts; keeping it for manual review' >&2
  exit 1
 fi
-trap - ERR
+trap - ERR INT TERM
 printf 'Containers recovered; removing verified old store\n'
 rm -rf --one-file-system "$source"
 mkdir -p "$source"
