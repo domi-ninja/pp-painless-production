@@ -1,4 +1,22 @@
 ---
+- name: Create writable pp proxy directory
+  ansible.builtin.file:
+    path: /etc/pp/proxy
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0755"
+
+- name: Keep the route lock writable by the deployment user
+  ansible.builtin.file:
+    path: /etc/pp/proxy/routes.lock
+    state: touch
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0600"
+    access_time: preserve
+    modification_time: preserve
+
 - name: Install Caddy
   ansible.builtin.apt:
     name: caddy
@@ -9,8 +27,8 @@
   ansible.builtin.file:
     path: "{{ reverse_proxy_routes_dir }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
     mode: "0755"
 
 - name: Ensure wildcard import has at least one route file

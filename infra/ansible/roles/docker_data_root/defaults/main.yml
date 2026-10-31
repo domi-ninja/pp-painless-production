@@ -1,6 +1,6 @@
 ---
 docker_data_root_enabled: false
-docker_data_root_path: /var/lib/docker
+docker_data_root_path: /data/docker
 docker_data_root_config:
   log-driver: json-file
   log-opts:

@@ -38,3 +38,8 @@ coolify_enabled: false
 # Keep secrets in host_vars/prod-1.credentials.local.yml or Ansible Vault.
 # pp also needs proxy-directory write access and permission to reload Caddy;
 # see docs/GETTING_STARTED.md before the first deployment.
+
+# When Docker relocation is enabled, containerd follows onto /data too.
+# containerd_data_root_enabled: true
+# containerd_data_root_path: /data/containerd
+docker_cache_cleanup_enabled: true

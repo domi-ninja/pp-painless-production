@@ -10,7 +10,7 @@ endif
 
 PP_BIN ?= $(BIN_DIR)/pp
 
-.PHONY: install test build clean
+.PHONY: install test test-storage build clean
 
 install:
 	@mkdir -p "$(dir $(PP_BIN))"
@@ -21,6 +21,9 @@ build: install
 
 test:
 	$(GO) test ./...
+
+test-storage:
+	node --test infra/ansible/tests/containerd-storage.test.ts
 
 clean:
 	rm -f "$(PP_BIN)"

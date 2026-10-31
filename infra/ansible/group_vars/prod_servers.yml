@@ -24,7 +24,7 @@ docker_users:
   - "{{ admin_user }}"
 docker_enabled: true
 docker_data_root_enabled: false
-docker_data_root_path: /var/lib/docker
+docker_data_root_path: /data/docker
 
 # Optional persistent data volume. Use host_vars for real device IDs.
 data_volume_enabled: false

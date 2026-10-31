@@ -160,6 +160,18 @@ func TestDockerRetentionAndPinnedRollback(t *testing.T) {
 	if err := exec.Command("docker", "image", "inspect", changed).Run(); err == nil {
 		t.Fatal("reused cache for a different upstream version")
 	}
+	// Digest references cannot be reconstructed with docker tag, even with a cache.
+	pinned := project.Name + "-pinned@sha256:" + strings.Repeat("a", 64)
+	pinnedCache := sourceCacheReference(project, "web", pinned)
+	run("tag", id, pinnedCache)
+	resources = append(resources, pinnedCache)
+	writeNestedFile(t, root, "pull-bundle/hosts/pull/compose.yml", "services:\n  web:\n    image: "+pinned+"\n")
+	if err := d.prepareSourceImages(pullPlan, pullHost); err != nil {
+		t.Fatalf("cached digest reference must fall through to pull: %v", err)
+	}
+	if err := exec.Command("docker", "image", "inspect", pinned).Run(); err == nil {
+		t.Fatal("fabricated a repository digest from a cache tag")
+	}
 	// Local migration images are pinned separately from application builds.
 	migrationPlan := Plan{Config: Config{Project: project}, ReleaseID: "migration"}
 	migrationBundle, err := RenderBundle(root, migrationPlan)
