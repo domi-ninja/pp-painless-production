@@ -42,3 +42,30 @@ The retained Coolify role is for legacy hosts. Leave it disabled for new pp setu
 ## Existing Git-host configuration
 
 Forgejo, Forgejo runner, Woodpecker and runner-isolation roles moved to the sibling `git-host-ansible` repository. Shared baseline roles were copied so both repos work independently. Existing ignored inventory and credential files were left untouched; they were not pushed to either repository. Move the relevant host settings into the new repo before using its playbooks, and never provision an existing server with placeholder secrets.
+
+## Containerd storage and cache cleanup
+
+Docker's containerd image store is separate from Docker's data root. Enabling
+`docker_data_root_enabled` also enables `containerd_data_root_enabled` by default.
+The default destinations are `/data/docker` and `/data/containerd`. The containerd
+helper currently supports the standard `/var/lib/containerd` to `/data/containerd`
+move and requires `/data` to be mounted. Override `containerd_data_root_enabled`
+to false only when containerd storage is managed separately.
+
+The Bash helper pre-copies the store, stops the running containers and both
+daemons, synchronizes the offline store with rsync, which verifies transferred data
+with transfer checksums. It saves the original configuration and running-container IDs under
+`/data/containerd-migration-TIMESTAMP`. It installs a containerd mount dependency,
+restarts the services and previously running containers, and waits for their health checks
+before removing the old copy. If the switch fails, it
+restores the old configuration and restarts against the retained source. Inspect
+a partial destination before retrying. Once the old copy is removed, restoring
+the old path requires another offline copy; the configuration backup alone is
+not a data backup.
+
+Provisioning also enables `pp-build-cache-cleanup.timer`. It runs daily with up
+to one hour of jitter and prunes unused default-builder cache older than seven
+days, retaining up to 10 GB under Docker's keep-storage policy. It does not prune
+images, containers, volumes, or pp rollback releases. Separate buildx builders
+retain their own BuildKit GC policies. Set `docker_cache_cleanup_enabled: false`
+to disable the timer. Use `journalctl -u pp-build-cache-cleanup` to inspect runs.

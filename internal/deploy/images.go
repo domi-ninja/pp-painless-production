@@ -238,7 +238,9 @@ func (d Deployer) prepareSourceImages(plan Plan, host HostBundle) error {
 		reference := compose.Services[service].Image
 		cache := sourceCacheReference(plan.Config.Project, service, reference)
 		script := "set -eu; if docker image inspect " + shellQuote(reference) + " >/dev/null 2>&1; then echo external; else\n"
-		if plan.Config.Services[service].Pull == "if_missing" {
+		// Docker cannot recreate a repository digest with docker tag. Let the
+		// normal pull restore its manifest; existing layer blobs are reused.
+		if plan.Config.Services[service].Pull == "if_missing" && !strings.Contains(reference, "@") {
 			script += "if docker image inspect " + shellQuote(cache) + " >/dev/null 2>&1; then docker tag " + shellQuote(cache) + " " + shellQuote(reference) + "; fi\n"
 		}
 		script += "echo managed; fi"
