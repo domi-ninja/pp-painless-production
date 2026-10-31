@@ -72,3 +72,7 @@
 - name: Configure Docker once after installation
   ansible.builtin.include_role:
     name: docker_data_root
+
+- name: Configure separate containerd store and build cache cleanup
+  ansible.builtin.include_role:
+    name: containerd_data_root

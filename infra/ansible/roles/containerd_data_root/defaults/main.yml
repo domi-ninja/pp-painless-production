@@ -1,0 +1,4 @@
+---
+containerd_data_root_enabled: "{{ docker_data_root_enabled | bool }}"
+containerd_data_root_path: /data/containerd
+docker_cache_cleanup_enabled: true

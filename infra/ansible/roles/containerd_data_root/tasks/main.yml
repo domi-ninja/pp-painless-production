@@ -1,0 +1,69 @@
+---
+- name: Create helper directory
+  ansible.builtin.file:
+    path: /usr/local/lib/pp
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install containerd relocation helper
+  ansible.builtin.copy:
+    src: relocate-containerd.sh
+    dest: /usr/local/lib/pp/relocate-containerd.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Relocate containerd storage when the data drive is enabled
+  ansible.builtin.command:
+    argv: [/usr/local/lib/pp/relocate-containerd.sh, "{{ containerd_data_root_path }}", "{{ admin_user | default('deploy') }}"]
+  register: pp_containerd_relocation
+  changed_when: "'Migration complete.' in pp_containerd_relocation.stdout"
+  when:
+    - containerd_data_root_enabled | bool
+    - not ansible_check_mode
+
+- name: Install bounded Docker build cache cleanup
+  ansible.builtin.copy:
+    src: cleanup-build-cache.sh
+    dest: /usr/local/lib/pp/cleanup-build-cache.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install cache cleanup service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/pp-build-cache-cleanup.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Clean unused Docker build cache older than seven days
+      After=docker.service
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/lib/pp/cleanup-build-cache.sh
+      TimeoutStartSec=30min
+      Nice=19
+      IOSchedulingClass=idle
+
+- name: Install cache cleanup timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/pp-build-cache-cleanup.timer
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily Docker build cache cleanup
+      [Timer]
+      OnCalendar=daily
+      RandomizedDelaySec=1h
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+
+- name: Configure cache cleanup schedule
+  ansible.builtin.systemd_service:
+    name: pp-build-cache-cleanup.timer
+    enabled: "{{ docker_cache_cleanup_enabled | bool }}"
+    state: "{{ 'started' if docker_cache_cleanup_enabled | bool else 'stopped' }}"
+    daemon_reload: true
