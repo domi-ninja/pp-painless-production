@@ -69,3 +69,16 @@ days, retaining up to 10 GB under Docker's keep-storage policy. It does not prun
 images, containers, volumes, or pp rollback releases. Separate buildx builders
 retain their own BuildKit GC policies. Set `docker_cache_cleanup_enabled: false`
 to disable the timer. Use `journalctl -u pp-build-cache-cleanup` to inspect runs.
+
+## Test storage changes
+
+Run `make test-storage` from the repository root with Node.js 22.18+ and rsync
+installed. The tests run the Bash migration helper against temporary directories
+and simulated daemon commands. They check copying, restart failure recovery,
+idempotence, and destination guards without touching host container storage.
+
+The Go image-cache integration tests use disposable Docker resources:
+
+```sh
+PP_TEST_DOCKER=1 go test ./internal/deploy -run 'TestDocker(RetentionAndPinnedRollback|DedicatedBuildCache)$' -count=1 -timeout=180s
+```
