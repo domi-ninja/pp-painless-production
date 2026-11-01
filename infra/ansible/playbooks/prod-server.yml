@@ -30,3 +30,5 @@
       when: docker_enabled | bool
     - role: reverse_proxy
       when: reverse_proxy_enabled | bool
+    - role: beszel_agent
+      when: beszel_enabled | default(false) | bool

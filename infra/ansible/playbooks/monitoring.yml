@@ -1,0 +1,6 @@
+---
+- name: Configure host monitoring
+  hosts: prod_servers
+  become: true
+  roles:
+    - role: beszel_agent

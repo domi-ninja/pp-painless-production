@@ -1,0 +1,85 @@
+---
+- name: Require Beszel enrollment settings
+  ansible.builtin.assert:
+    that:
+      - beszel_hub_url is match('^https://')
+      - beszel_public_key | length > 20
+      - beszel_agent_token | length > 8
+      - ansible_architecture in ['x86_64', 'aarch64']
+    fail_msg: "Supply the Beszel hub URL, public key, and host enrollment token."
+  no_log: true
+
+- name: Read installed agent version
+  ansible.builtin.command: /usr/local/bin/beszel-agent --version
+  register: beszel_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: Create Beszel directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/beszel, mode: '0700' }
+    - { path: /var/lib/beszel-agent, mode: '0700' }
+    - { path: /usr/local/lib/beszel, mode: '0755' }
+    - { path: /var/cache/beszel-agent, mode: '0700' }
+
+- name: Download pinned agent with release checksum
+  ansible.builtin.get_url:
+    url: "https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel-agent_linux_{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}.tar.gz"
+    dest: /var/cache/beszel-agent/agent.tar.gz
+    checksum: "sha256:https://github.com/henrygd/beszel/releases/download/v{{ beszel_agent_version }}/beszel_{{ beszel_agent_version }}_checksums.txt"
+    mode: '0600'
+  when: beszel_installed_version.rc != 0 or beszel_agent_version not in beszel_installed_version.stdout
+
+- name: Install pinned Beszel agent
+  ansible.builtin.unarchive:
+    src: /var/cache/beszel-agent/agent.tar.gz
+    dest: /usr/local/bin
+    remote_src: true
+    include: [beszel-agent]
+    owner: root
+    group: root
+    mode: '0755'
+  when: beszel_installed_version.rc != 0 or beszel_agent_version not in beszel_installed_version.stdout
+  notify: Restart Beszel agent
+
+- name: Install filesystem discovery
+  ansible.builtin.copy:
+    src: discover-filesystems.sh
+    dest: /usr/local/lib/beszel/discover-filesystems.sh
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart Beszel agent
+
+- name: Configure host enrollment
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: /etc/beszel/agent.env
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify: Restart Beszel agent
+
+- name: Install Beszel systemd service
+  ansible.builtin.copy:
+    src: beszel-agent.service
+    dest: /etc/systemd/system/beszel-agent.service
+    owner: root
+    group: root
+    mode: '0644'
+  register: beszel_service_file
+  notify: Restart Beszel agent
+
+- name: Enable host monitoring
+  ansible.builtin.systemd_service:
+    name: beszel-agent
+    enabled: true
+    state: started
+    daemon_reload: "{{ beszel_service_file.changed }}"

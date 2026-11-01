@@ -1,0 +1,7 @@
+---
+beszel_enabled: false
+beszel_agent_version: "0.21.1"
+beszel_hub_url: ""
+beszel_public_key: ""
+beszel_agent_token: ""
+beszel_system_name: "{{ inventory_hostname }}"

@@ -1,0 +1,21 @@
+[Unit]
+Description=Beszel server monitoring agent
+After=network-online.target docker.service
+Wants=network-online.target
+[Service]
+EnvironmentFile=/etc/beszel/agent.env
+EnvironmentFile=-/run/beszel-agent/filesystems.env
+ExecStartPre=/usr/local/lib/beszel/discover-filesystems.sh
+ExecStart=/usr/local/bin/beszel-agent
+Restart=always
+RestartSec=5
+StateDirectory=beszel-agent
+StateDirectoryMode=0700
+RuntimeDirectory=beszel-agent
+RuntimeDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/beszel-agent
+[Install]
+WantedBy=multi-user.target
