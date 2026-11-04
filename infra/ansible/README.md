@@ -53,6 +53,8 @@ UFW rules carry a `pp-managed` comment. The playbook adds the desired rules firs
 
 Set `data_volume_backup_confirmed: true` only after checking the device and a usable backup, or confirming that the new device has no data to preserve. The role refuses a mount point that contains fallback data, another mounted device, old mount points to remove, or `nofail`. Stop consumers and move existing mounts deliberately before rerunning.
 
+Data volumes default to `defaults,nodiscard`. ext4 online discard runs when blocks are freed and can delay journal commits on network block storage. Use the host's periodic `fstrim.timer` for reclamation; inspect its schedule with `systemctl list-timers fstrim.timer`.
+
 The host records the expected mounted device. Docker depends on that mount, and pp verifies it before deployment and service startup. If a database looks empty after boot, check `findmnt -M /data` before initializing anything. An unmounted directory can contain a separate database on the root filesystem.
 
 For Docker relocation, set `docker_data_root_enabled: true`, `docker_data_root_path` and `docker_data_root_backup_confirmed: true`. The destination must be empty and must not overlap the current root. The helper stops running containers and Docker, copies from the root returned by `docker info`, and preserves that source. It merges daemon settings once, verifies the new root, then restarts the stopped containers. A failure restores the prior daemon config and restarts Docker against its original data.
